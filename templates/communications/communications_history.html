@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+{% set active_page = 'communications' %}
+
+{% block title %}{{ t("communications") }} - VODUM{% endblock %}
+{% block header_title %}{{ t("communications") }}{% endblock %}
+{% block header_subtitle %}{{ t("communications_subtitle") }}{% endblock %}
+
+{% block content %}
+
+{% set current_subpage = 'history' %}
+{% include "communications/_communications_nav.html" %}
+
+{% set sort = sort or 'sent_at' %}
+{% set order = order or 'desc' %}
+
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-4">
+  <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+    <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("comm_summary_email") }}</div>
+    <div class="mt-2 text-2xl font-semibold text-emerald-300">{{ communication_summary.email_sent }}</div>
+    <div class="mt-1 text-xs text-slate-400">{{ t("sent") }} - <span class="text-rose-300">{{ communication_summary.email_failed }} {{ t("failed") }}</span></div>
+  </div>
+  <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+    <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("comm_summary_discord") }}</div>
+    <div class="mt-2 text-2xl font-semibold text-indigo-300">{{ communication_summary.discord_sent }}</div>
+    <div class="mt-1 text-xs text-slate-400">{{ t("sent") }} - <span class="text-rose-300">{{ communication_summary.discord_failed }} {{ t("failed") }}</span></div>
+  </div>
+  <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+    <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("comm_summary_last_24h") }}</div>
+    <div class="mt-2 text-2xl font-semibold text-slate-100">{{ communication_summary.sent_24h }}</div>
+    <div class="mt-1 text-xs text-slate-400">{{ t("sent") }} - <span class="text-rose-300">{{ communication_summary.failed_24h }} {{ t("failed") }}</span></div>
+  </div>
+  <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+    <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("comm_summary_queue") }}</div>
+    <div class="mt-2 text-2xl font-semibold text-amber-300">{{ communication_summary.pending }}</div>
+    <div class="mt-1 text-xs text-slate-400">{{ t("pending") }} - <span class="text-rose-300">{{ communication_summary.errors }} {{ t("in_error") }}</span></div>
+  </div>
+</div>
+
+{% macro sort_link(label, key) -%}
+  {% set is_active = (sort == key) %}
+  <a
+    href="{{ url_for('communications_history_page', sort=key, order=('asc' if is_active and order == 'desc' else 'desc'), page=1, trigger=trigger_filter, per_page=per_page) }}"
+    class="inline-flex items-center gap-1 transition {{ 'text-emerald-400' if is_active else 'text-slate-400 hover:text-slate-200' }}"
+  >
+    <span>{{ label }}</span>
+
+    {% if is_active %}
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        class="w-3 h-3 opacity-40"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
+        {% if order == 'asc' %}
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+        {% else %}
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+        {% endif %}
+      </svg>
+    {% endif %}
+  </a>
+{%- endmacro %}
+
+<div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+  <div class="px-4 py-3 border-b border-slate-800">
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+      <div>
+        <h2 class="text-sm font-semibold text-slate-100">{{ t('comm_history_deliveries') }}</h2>
+        <p class="text-xs text-slate-500 mt-1">{{ t('comm_history_deliveries_help') }}</p>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <form method="get" class="flex items-center">
+          <input type="hidden" name="trigger" value="{{ trigger_filter }}">
+          <input type="hidden" name="sort" value="{{ sort }}">
+          <input type="hidden" name="order" value="{{ order }}">
+          <select name="per_page" aria-label="{{ t('rows_per_page') }}" class="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200" onchange="this.form.submit()">
+            {% for size in (20, 50, 100) %}<option value="{{ size }}" {% if per_page == size %}selected{% endif %}>{{ size }}</option>{% endfor %}
+          </select>
+        </form>
+        {% for value, label in trigger_options %}
+          <a
+            href="{{ url_for('communications_history_page', trigger=value, sort=sort, order=order, page=1, per_page=per_page) }}"
+            class="px-3 py-1.5 rounded-lg text-xs border {{ 'border-primary bg-primary/15 text-primary' if trigger_filter == value else 'border-slate-700 bg-slate-950 text-slate-300 hover:bg-slate-800' }}"
+          >{{ t(label) }}</a>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="w-full text-xs table-fixed">
+      <thead class="bg-slate-950/60 text-left">
+        <tr>
+          <th class="px-4 py-3 w-[220px]">
+            {{ sort_link(t('kind'), 'kind') }}
+          </th>
+          <th class="px-4 py-3 w-[190px]">
+            {{ sort_link(t('user'), 'user') }}
+          </th>
+          <th class="px-4 py-3 w-[150px]">
+            {{ sort_link(t('channel_used'), 'channel_used') }}
+          </th>
+          <th class="px-4 py-3 w-[140px]">
+            {{ sort_link(t('status'), 'status') }}
+          </th>
+          <th class="px-4 py-3">
+            {{ t('details') }}
+          </th>
+          <th class="px-4 py-3 w-[190px]">
+            {{ sort_link(t('sent_at'), 'sent_at') }}
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for h in history %}
+        {% set modal_payload = {
+          "kind": h.kind or "",
+          "kind_label": (t('comm_history_queued_template') if h.is_scheduled else (t('template') if h.kind == 'template' else t('campaign'))),
+          "name": ((h.template_name or t(h.template_key)) if h.kind == 'template' and h.template_key else h.campaign_name) or "",
+          "user": h.user_username or "",
+          "channel_used": t(h.channel_used) if h.channel_used else "-",
+          "status": t(h.status),
+          "error": h.error or "",
+          "sent_at": h.sent_at or "-",
+          "subject": h.rendered_subject or "",
+          "body": h.rendered_body or "",
+          "meta_json": h.meta_json if h.is_scheduled else ""
+        } %}
+        <tr
+          class="border-t border-slate-800 cursor-pointer hover:bg-slate-800/40 focus-within:bg-slate-800/40"
+          tabindex="0"
+          role="button"
+          data-history='{{ modal_payload | tojson | forceescape }}'
+          {% if not h.is_scheduled and h.id is defined and h.id %}data-history-url="{{ url_for('communications_history_detail', history_id=h.id) }}"{% endif %}
+        >
+          <td class="px-4 py-3 align-top">
+            <div class="flex items-center gap-2 min-w-0">
+              {% if h.is_scheduled %}
+                <span class="px-2 py-1 rounded bg-amber-900/40 text-amber-300 shrink-0">{{ t('queued') }}</span>
+                <span class="text-slate-400 truncate">{{ (h.template_name or t(h.template_key)) if h.template_key else '-' }}</span>
+              {% elif h.kind == 'template' %}
+                <span class="px-2 py-1 rounded bg-slate-800 text-slate-200 shrink-0">{{ t('template') }}</span>
+                {% if h.template_key %}
+                  <span class="text-slate-400 truncate">{{ (h.template_name or t(h.template_key)) }}</span>
+                {% endif %}
+              {% else %}
+                <span class="px-2 py-1 rounded bg-slate-800 text-slate-200 shrink-0">{{ t('campaign') }}</span>
+                {% if h.campaign_name %}
+                  <span class="text-slate-400 truncate">{{ h.campaign_name }}</span>
+                {% endif %}
+              {% endif %}
+            </div>
+          </td>
+
+          <td class="px-4 py-3 align-top">
+            <div class="truncate" title="{{ h.user_username or '-' }}">{{ h.user_username or '-' }}</div>
+          </td>
+
+          <td class="px-4 py-3 align-top">
+            {{ t(h.channel_used) if h.channel_used else '-' }}
+          </td>
+
+          <td class="px-4 py-3 align-top">
+            {% if h.status == 'sent' %}
+              <span class="px-2 py-1 rounded-full bg-emerald-900/40 text-emerald-300">{{ t('sent') }}</span>
+            {% elif h.status == 'pending' %}
+              <span class="px-2 py-1 rounded-full bg-amber-900/40 text-amber-300">{{ t('pending') }}</span>
+            {% elif h.status == 'error' %}
+              <span class="px-2 py-1 rounded-full bg-rose-900/40 text-rose-300">{{ t('error') }}</span>
+            {% else %}
+              <span class="px-2 py-1 rounded-full bg-rose-900/40 text-rose-300">{{ t('failed') }}</span>
+            {% endif %}
+          </td>
+
+          <td class="px-4 py-3 align-top text-slate-400">
+            {% if h.is_scheduled %}
+              <div class="truncate" title="{{ t(h.error) if h.error else t('comm_waiting_delivery') }}">{{ t(h.error) if h.error else t('comm_waiting_delivery') }}</div>
+              <div class="text-[11px] text-slate-500 mt-1">{{ t('comm_history_attempts') }} {{ h.attempt_count or 0 }} / {{ h.max_attempts or 10 }}{% if h.next_attempt_at %} - {{ t('comm_history_next_attempt') }} {{ h.next_attempt_at|browser_datetime }}{% endif %}</div>
+            {% else %}
+              <div class="truncate" title="{{ h.error or '-' }}">{{ h.error or '-' }}</div>
+            {% endif %}
+          </td>
+
+          <td class="px-4 py-3 align-top whitespace-nowrap">
+            {{ h.sent_at|browser_datetime if h.sent_at else '-' }}
+          </td>
+        </tr>
+      {% else %}
+        <tr>
+          <td colspan="6" class="px-4 py-8 text-center text-slate-500">
+            {{ t("no_history") }}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% set pagination = {
+  "page": page,
+  "total_pages": total_pages,
+  "total_rows": total_rows,
+  "unit_label": t("comm_history_rows"),
+  "first_url": url_for("communications_history_page", page=1, sort=sort, order=order, trigger=trigger_filter, per_page=per_page),
+  "prev_url": url_for("communications_history_page", page=page-1, sort=sort, order=order, trigger=trigger_filter, per_page=per_page),
+  "next_url": url_for("communications_history_page", page=page+1, sort=sort, order=order, trigger=trigger_filter, per_page=per_page),
+  "last_url": url_for("communications_history_page", page=total_pages, sort=sort, order=order, trigger=trigger_filter, per_page=per_page)
+} %}
+<div class="mt-4">
+  {% include "partials/_pagination.html" %}
+</div>
+
+<p class="mt-3 text-[11px] text-slate-500">{{ t('comm_history_note') }}</p>
+
+<div
+  id="commHistoryModal"
+  class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/80 px-4"
+  data-comm-history-modal
+>
+  <div
+    class="vodum-modal-viewport w-full max-w-4xl overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl flex flex-col"
+    data-comm-history-panel
+  >
+    <div class="shrink-0 flex items-center justify-between px-5 py-4 border-b border-slate-800">
+      <div>
+        <div id="commHistoryModalTitle" class="text-lg font-semibold text-slate-100">{{ t("comm_history_details") }}</div>
+        <div id="commHistoryModalSubtitle" class="text-xs text-slate-400 mt-1"></div>
+      </div>
+      <button
+        type="button"
+        class="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-950 hover:bg-slate-800 text-slate-200"
+        data-comm-history-close
+      >
+        {{ t("close") }}
+      </button>
+    </div>
+
+    <div class="vodum-modal-scroll flex-1 p-5 space-y-5">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
+          <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-2">{{ t("general") }}</div>
+          <div class="space-y-2 text-sm">
+            <div><span class="text-slate-400">{{ t("type") }}:</span> <span id="commHistoryModalKind" class="text-slate-100"></span></div>
+            <div><span class="text-slate-400">{{ t("name") }}:</span> <span id="commHistoryModalName" class="text-slate-100"></span></div>
+            <div><span class="text-slate-400">{{ t("user") }}:</span> <span id="commHistoryModalUser" class="text-slate-100"></span></div>
+            <div><span class="text-slate-400">{{ t("communications.channel") }}:</span> <span id="commHistoryModalChannel" class="text-slate-100"></span></div>
+            <div><span class="text-slate-400">{{ t("status") }}:</span> <span id="commHistoryModalStatus" class="text-slate-100"></span></div>
+            <div><span class="text-slate-400">{{ t("sent_at") }}:</span> <span id="commHistoryModalSentAt" class="text-slate-100"></span></div>
+          </div>
+        </div>
+
+        <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
+          <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-2">{{ t("error") }}</div>
+          <pre id="commHistoryModalError" class="whitespace-pre-wrap break-words text-sm text-slate-200 min-h-[80px]"></pre>
+        </div>
+      </div>
+
+      <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
+        <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-2">{{ t("subject") }}</div>
+        <pre id="commHistoryModalSubject" class="whitespace-pre-wrap break-words text-sm text-slate-100"></pre>
+      </div>
+
+      <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
+        <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-2">{{ t("body") }}</div>
+        <pre id="commHistoryModalBody" class="whitespace-pre-wrap break-words text-sm text-slate-100"></pre>
+      </div>
+
+      <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
+        <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-2">{{ t("comm_history_meta_json") }}</div>
+        <pre id="commHistoryModalMeta" class="whitespace-pre-wrap break-words text-xs text-slate-300"></pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="application/json" id="comm-history-config">
+  {
+    "detailsLabel": {{ t("comm_history_details")|tojson }},
+    "entryLabel": {{ t("comm_history_entry")|tojson }},
+    "loadingLabel": {{ t("loading")|tojson }},
+    "loadErrorLabel": {{ t("request_failed")|tojson }}
+  }
+</script>
+<script src="{{ url_for('static', filename='js/pages/communications-history.js', v=g.app_version|default('dev')) }}"></script>
+
+{% endblock %}

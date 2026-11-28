@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% set active_page = "server_configuration" %}
+
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/server-configuration.css', v=g.app_version|default('dev')) }}">{% endblock %}
+{% block header_title %}{{ profile.name }}{% endblock %}
+{% block header_subtitle %}{{ t("config_profile_subtitle").format(platform="Plex" if profile.provider == "plex" else "Jellyfin") }}{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  {% include "server_configuration/_nav.html" %}
+
+  <div class="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
+    <div class="xl:col-span-2 space-y-6">
+      <form method="POST" action="{{ url_for('server_configuration_profile_save', profile_id=profile.id) }}"
+            class="bg-slate-900 p-6 rounded-xl border border-slate-800 space-y-4" data-config-profile-form>
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label for="config-profile-name" class="block text-sm mb-1 text-slate-300">{{ t("config_profile_name") }}</label>
+            <input id="config-profile-name" type="text" name="name" required maxlength="80" value="{{ profile.name }}"
+                   class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+          </div>
+          <div>
+            <label for="config-profile-description" class="block text-sm mb-1 text-slate-300">{{ t("config_description") }}</label>
+            <input id="config-profile-description" type="text" name="description" maxlength="300" value="{{ profile.description }}"
+                   class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-end gap-4">
+          <div class="flex-1 min-w-[12rem]">
+            <label for="config-profile-search" class="block text-xs mb-1 text-slate-400">{{ t("server_config_search") }}</label>
+            <input id="config-profile-search" type="search" data-profile-search autocomplete="off"
+                   class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+          </div>
+          <div class="text-xs text-slate-400 py-2">{{ t("config_profile_settings_count").format(count=settings|length) }}</div>
+        </div>
+
+        {% if settings %}
+        <ul class="divide-y divide-slate-800 border-t border-slate-800">
+          {% for key, entry in settings %}
+          <li data-profile-row data-search="{{ (entry.label ~ ' ' ~ key ~ ' ' ~ (entry.library or ''))|lower }}"
+              class="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] items-center gap-3 py-2">
+            <div class="min-w-0">
+              <div class="text-sm text-slate-200">{% if entry.library %}<span class="text-slate-400">{{ entry.library }} · </span>{% endif %}{{ entry.label }}</div>
+              <div class="text-[11px] text-slate-500">{{ t("server_config_cat_" ~ entry.category) }} · <span class="font-mono break-all">{{ key }}</span></div>
+            </div>
+            <div>
+              {% if entry.type == "bool" %}
+              <select name="value:{{ key }}" aria-label="{{ entry.label }}" class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm">
+                <option value="true" {% if entry.value == "true" %}selected{% endif %}>{{ t("yes") }}</option>
+                <option value="false" {% if entry.value == "false" %}selected{% endif %}>{{ t("no") }}</option>
+              </select>
+              {% elif entry.choices %}
+              <select name="value:{{ key }}" aria-label="{{ entry.label }}" class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm">
+                {% for choice in entry.choices %}<option value="{{ choice.value }}" {% if choice.value|string == entry.value %}selected{% endif %}>{{ choice.label }}</option>{% endfor %}
+              </select>
+              {% else %}
+              <input type="text" name="value:{{ key }}" value="{{ entry.value }}" maxlength="1000" aria-label="{{ entry.label }}"
+                     class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm">
+              {% endif %}
+            </div>
+            <label class="inline-flex items-center gap-2 text-xs text-slate-400">
+              <input type="checkbox" name="remove" value="{{ key }}" class="w-4 h-4 rounded border-slate-600 bg-slate-800">
+              {{ t("config_profile_remove_setting") }}
+            </label>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="text-sm text-slate-400">{{ t("config_profile_empty") }}</p>
+        {% endif %}
+        <div class="flex justify-end">
+          <button type="submit" class="px-4 py-2 bg-primary hover:bg-primary-dark rounded text-white text-sm">{{ t("save") }}</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="space-y-6">
+      <form method="POST" action="{{ url_for('server_configuration_profile_targets', profile_id=profile.id) }}"
+            class="bg-slate-900 p-6 rounded-xl border border-slate-800 space-y-3">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+        <h2 class="text-sm font-semibold text-slate-200">{{ t("config_profile_targets") }}</h2>
+        <p class="text-xs text-slate-400">{{ t("config_profile_targets_help") }}</p>
+        {% for server in compatible_servers %}
+        <label class="flex items-center gap-2 text-sm text-slate-200">
+          <input type="checkbox" name="server_ids" value="{{ server.id }}" {% if server.id in targets.servers %}checked{% endif %}
+                 class="w-4 h-4 rounded border-slate-600 bg-slate-800">
+          {{ server.name }}
+        </label>
+        {% endfor %}
+        {% if groups %}
+        <div class="text-xs text-slate-400 pt-2">{{ t("config_tab_groups") }}</div>
+        {% for group in groups %}
+        <label class="flex items-center gap-2 text-sm text-slate-200">
+          <input type="checkbox" name="group_ids" value="{{ group.id }}" {% if group.id in targets.groups %}checked{% endif %}
+                 class="w-4 h-4 rounded border-slate-600 bg-slate-800">
+          {{ group.name }}
+        </label>
+        {% endfor %}
+        {% endif %}
+        <div class="flex justify-end">
+          <button type="submit" class="px-4 py-2 rounded bg-slate-800 hover:bg-slate-700 text-sm text-slate-200">{{ t("save") }}</button>
+        </div>
+      </form>
+
+      {% if compatible_servers %}
+      <form method="POST" action="{{ url_for('server_configuration_profile_import', profile_id=profile.id) }}"
+            class="bg-slate-900 p-6 rounded-xl border border-slate-800 space-y-3">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+        <h2 class="text-sm font-semibold text-slate-200">{{ t("config_profile_import") }}</h2>
+        <p class="text-xs text-slate-400">{{ t("config_profile_import_help") }}</p>
+        <select name="server_id" aria-label="{{ t('config_profile_import') }}" class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+          {% for server in compatible_servers %}<option value="{{ server.id }}">{{ server.name }}</option>{% endfor %}
+        </select>
+        <label class="flex items-center gap-2 text-xs text-slate-300">
+          <input type="checkbox" name="replace_values" value="1" class="w-4 h-4 rounded border-slate-600 bg-slate-800">
+          {{ t("config_profile_import_replace") }}
+        </label>
+        <label class="flex items-center gap-2 text-xs text-slate-300">
+          <input type="checkbox" name="skip_libraries" value="1" class="w-4 h-4 rounded border-slate-600 bg-slate-800">
+          {{ t("config_profile_skip_libraries") }}
+        </label>
+        <div class="flex justify-end">
+          <button type="submit" class="px-4 py-2 rounded bg-slate-800 hover:bg-slate-700 text-sm text-slate-200">{{ t("config_profile_import_run") }}</button>
+        </div>
+      </form>
+      {% endif %}
+
+      <div class="bg-slate-900 p-6 rounded-xl border border-slate-800 flex flex-wrap gap-2">
+        {% set compare_ids = compatible_servers|selectattr("id", "in", targets.servers)|map(attribute="id")|list %}
+        <a href="{{ url_for('server_configuration_settings_view', provider=profile.provider, servers=compare_ids or (compatible_servers|map(attribute='id')|list), show='off_profile') }}"
+           class="px-4 py-2 rounded bg-slate-800 hover:bg-slate-700 text-sm text-slate-200">{{ t("config_profile_compare") }}</a>
+        <form method="POST" action="{{ url_for('server_configuration_profile_duplicate', profile_id=profile.id) }}">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="px-4 py-2 rounded bg-slate-800 hover:bg-slate-700 text-sm text-slate-200">{{ t("config_profile_duplicate") }}</button>
+        </form>
+        <form method="POST" action="{{ url_for('server_configuration_profile_delete', profile_id=profile.id) }}"
+              data-confirm="{{ t('config_profile_delete_confirm') }}" data-confirm-title="{{ t('config_profile_delete') }}"
+              data-confirm-label="{{ t('config_profile_delete') }}">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="px-4 py-2 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-sm">{{ t("config_profile_delete") }}</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ url_for('static', filename='js/pages/server-configuration.js', v=g.app_version|default('dev')) }}"></script>
+  {% include "partials/confirm_modal.html" %}
+{% endblock %}

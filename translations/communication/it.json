@@ -1,0 +1,48 @@
+{
+  "language_name": "Italiano",
+  "common": {
+    "none": "Nessuno"
+  },
+  "policy": {
+    "warn_title_expired": "Abbonamento scaduto",
+    "subscription_expired": "Il tuo abbonamento è terminato. Rinnovalo per ripristinare l'accesso.",
+    "max_streams_per_user": "Il tuo abbonamento consente {limit} riproduzione/i simultanea/e. VODUM ha rilevato {value} riproduzione/i.",
+    "max_ips_per_user": "Troppe indirizzi IP diversi stanno usando il tuo account.",
+    "max_streams_per_ip": "Troppe riproduzioni simultanee usano lo stesso indirizzo IP ({ip}).",
+    "max_streams_per_server": "Il limite di riproduzioni del server è stato raggiunto.",
+    "max_transcodes": "Sono attive troppe riproduzioni transcodificate.",
+    "max_bitrate": "Una riproduzione supera il limite di bitrate consentito.",
+    "ban_4k_transcode": "La transcodifica 4K non è consentita.",
+    "unknown": "Una regola di riproduzione è stata violata: {rule_type}.",
+    "limit_label_max_ips_per_user": "Numero massimo di indirizzi IP per utente",
+    "limit_label_max_streams_per_user": "Numero massimo di riproduzioni per utente",
+    "limit_label_max_streams_per_ip": "Numero massimo di riproduzioni per indirizzo IP",
+    "limit_label_max_streams_per_server": "Numero massimo di riproduzioni per server",
+    "limit_label_max_transcodes": "Numero massimo di riproduzioni transcodificate",
+    "limit_label_max_bitrate": "Bitrate massimo",
+    "limit_label_ban_4k_transcode": "Transcodifica 4K bloccata",
+    "limit_label_unknown": "Limite della regola"
+  },
+  "portal": {
+    "invitation": {"subject": "Invito al portale {brand_name}", "body": "Ciao {username},\n\nAttiva il tuo account con questo link monouso valido 7 giorni:\n{url}"},
+    "password_reset": {"subject": "Reimposta la password {brand_name}", "body": "Usa questo link monouso entro un'ora:\n{url}"},
+    "authentication_changed": {"subject": "L'autenticazione {brand_name} e stata reimpostata", "body": "Ciao {username},\n\nUn amministratore ha reimpostato i tuoi metodi di accesso. E necessario un nuovo invito.\n\n{portal_login_url}"},
+    "suspended": {"subject": "L'accesso al portale {brand_name} e stato sospeso", "body": "Ciao {username},\n\nIl tuo accesso al portale e stato sospeso. Contatta il supporto se necessario."},
+    "reactivated": {"subject": "L'accesso al portale {brand_name} e stato riattivato", "body": "Ciao {username},\n\nIl tuo accesso al portale e stato riattivato.\n\n{portal_login_url}"},
+    "new_login": {"subject": "Nuovo accesso al portale {brand_name}", "body": "Ciao {username},\n\nE stato registrato un nuovo accesso. Reimposta la password se non eri tu.\n\n{portal_login_url}"},
+    "direct_message": {"subject": "Nuovo messaggio nel portale {brand_name}", "body": "Ciao {username},\n\nHai ricevuto un nuovo messaggio da un amministratore. Accedi al portale per leggerlo.\n\n{portal_login_url}"}
+  },
+  "activation": {"button": "Attiva il mio accesso", "instructions": "Per il primo accesso, inizia dal pulsante qui sotto. Su Plex, crea un account o accedi con l’indirizzo che ha ricevuto questa email, poi torna alla pagina di attivazione. Attendi che tutti i server siano pronti. Se un invito è in attesa, accettalo su Plex e torna a verificare l’accesso. Il collegamento di accesso al portale serve per le visite successive."},
+  "default_templates": {
+    "copy_suffix": "Predefinito",
+    "stream_blocked": {"name": "Riproduzione bloccata", "subject": "Riproduzione bloccata", "body": "Ciao {firstusername},\n\nla tua riproduzione è stata interrotta da {brand_name}.\n\n{policy_explanation}\n\nRegola: {policy_rule_type}\nLimite: {policy_limit} ({policy_limit_label})\nRilevato: {policy_observed}\n\nRiproduzione interrotta:\n{stream_killed}\n\nStream attivi coinvolti ({active_streams_count}):\n{active_streams}\n\nIP pubblici rilevati ({active_ips_count}):\n{active_ips}\n\nDispositivi rilevati ({active_devices_count}):\n{active_devices}\n\nOra: {blocked_at}\n\nSe pensi che si tratti di un errore, contatta l'amministratore.\n\nCordiali saluti,\n{brand_name}\n"},
+    "default_expiration_date_change": {"name": "Modifica della data di scadenza", "subject": "La data del tuo abbonamento è stata aggiornata", "body": "Ciao {username},\n\nla data di scadenza del tuo abbonamento è stata aggiornata.\n\nData di scadenza precedente: {old_expiration_date}\nNuova data di scadenza: {new_expiration_date}\nVariazione: {expiration_change_signed_days} giorno/i\nMotivo: {expiration_change_reason}\n\nCordiali saluti,\n{brand_name}\n"},
+    "default_fin": {"name": "Abbonamento scaduto", "subject": "Il tuo abbonamento è scaduto", "body": "Ciao {username},\n\nil tuo abbonamento è scaduto il {expiration_date}.\nIl tuo accesso potrebbe ora essere sospeso.\n\nSe desideri continuare a usare il servizio, rinnova il tuo abbonamento.\n\nCordiali saluti,\n{brand_name}\n"},
+    "default_pending_invite_reminder": {"name": "Promemoria invito in sospeso", "subject": "Promemoria - accetta il tuo invito", "body": "Ciao {username},\n\nil tuo invito è ancora in attesa di accettazione.\n\nPer iniziare a usare il tuo account:\n- Apri Plex o Jellyfin\n- Accedi con il tuo account\n- Accetta l'invito alla condivisione delle librerie, se richiesto\n\nLa scadenza del tuo abbonamento è attualmente impostata al: {expiration_date}\n\nCordiali saluti,\n{brand_name}\n"},
+    "default_preavis": {"name": "Avviso di scadenza", "subject": "Il tuo abbonamento scade tra {days_left} giorni", "body": "Ciao {username},\n\nil tuo abbonamento scade tra {days_left} giorni.\n\nData di scadenza: {expiration_date}\n\nRinnovalo per evitare interruzioni del servizio.\n\nCordiali saluti,\n{brand_name}\n"},
+    "default_parrainage": {"name": "Premio presentazione", "subject": "Premio presentazione assegnato", "body": "Ciao {username},\n\nbuone notizie: hai ottenuto {referral_reward_days} giorno/i bonus grazie a {referred_username}.\n\nData di scadenza precedente: {referrer_old_expiration_date}\nNuova data di scadenza: {referrer_new_expiration_date}\n\nGrazie per la presentazione.\n\nCordiali saluti,\n{brand_name}\n"},
+    "default_relance": {"name": "Promemoria di scadenza", "subject": "Promemoria - il tuo abbonamento scade presto", "body": "Ciao {username},\n\nti ricordiamo che il tuo abbonamento scade tra {days_left} giorni.\n\nData di scadenza: {expiration_date}\n\nRinnovalo in tempo per evitare interruzioni del servizio.\n\nCordiali saluti,\n{brand_name}\n"},
+    "default_user_creation": {"name": "Creazione utente", "subject": "Benvenuto - il tuo account è pronto", "body": "Ciao {username},\n\nil tuo account {provider_name} è stato creato correttamente.\n\nServer: {server_name}\nIndirizzo: {server_url}\nAccesso: {login_username}\n\nSolo Jellyfin (non usato per Plex):\nNome utente Jellyfin: {jellyfin_username}\nPassword Jellyfin: {jellyfin_password}\n\nScarica il player ufficiale:\n{player_download_url}\n\nAiuto per la configurazione:\n{player_help_url}\n\nAccedi e accetta l'invito alla condivisione delle librerie, se richiesto.\n\nData di scadenza dell'abbonamento: {expiration_date}\n\nCordiali saluti,\n{brand_name}\n"},
+    "usage_risk_upgrade_suggestion": {"name": "Suggerimento di abbonamento più adatto", "subject": "Potrebbe esserci un abbonamento più adatto", "body": "Ciao {username},\n\nabbiamo notato che il tuo utilizzo raggiunge spesso i limiti del tuo abbonamento attuale.\n\nAbbonamento attuale: {current_subscription}\nAbbonamento suggerito: {suggested_subscription}\n\nÈ solo un consiglio per migliorare la tua esperienza ed evitare riproduzioni bloccate.\n\nCordiali saluti,\n{brand_name}\n"}
+  }
+}

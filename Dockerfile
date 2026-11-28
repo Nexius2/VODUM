@@ -1,0 +1,71 @@
+﻿FROM python:3.14-slim-trixie
+
+# Runtime defaults and minimal system dependencies
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# libatomic1: required by the Node.js runtime bundled with Playwright 1.65.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends sqlite3 libatomic1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Working directory
+WORKDIR /app
+
+# Python deps
+COPY requirements.txt .
+RUN python -m pip install -r requirements.txt
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
+RUN python -m playwright install --with-deps chromium \
+    && chmod -R a+rX /opt/playwright \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy application source
+COPY app/ /app/
+COPY templates/ /app/templates/
+COPY static/ /app/static/
+COPY translations/ /app/translations/
+COPY migrations/ /app/migrations/
+
+# Verify the application module and startup files are present in the context.
+RUN test -f /app/core/migrations/credentials.py \
+    && test -f /app/serve.py \
+    && test -f /app/migrations/detect_legacy_foreign_keys.sql
+
+# Fail the image build if the dedicated Plex sign-in UI is missing from the
+# Docker context. This prevents an apparently successful rebuild from shipping
+# stale settings templates.
+RUN grep -Fq 'data-testid="plex-auth-settings-card"' /app/templates/settings/partials/_settings_security.html \
+    && grep -Fq 'form="plex-auth-link-form"' /app/templates/settings/partials/_settings_security.html \
+    && grep -Fq 'include "settings/partials/_settings_security.html"' /app/templates/settings/settings.html \
+    && grep -Fq "url_for('plex_auth_link_start')" /app/templates/settings/settings.html \
+    && grep -Fq 'name="admin_auth_method"' /app/templates/setup/wizard.html \
+    && grep -Fq 'wizard_admin_use_plex_help' /app/templates/setup/wizard.html \
+    && grep -Fq 'include "servers/_plex_suggestions_loader.html"' /app/templates/servers/servers.html \
+    && grep -Fq "url_for('server_plex_suggestions_partial')" /app/templates/servers/_plex_suggestions_loader.html \
+    && grep -Fq '"servers/_plex_suggestions_result.html"' /app/routes/servers.py \
+    && grep -Fq 'include "servers/_plex_suggestions.html"' /app/templates/servers/_plex_suggestions_result.html \
+    && grep -Fq 'include "servers/_plex_suggestions.html"' /app/templates/setup/wizard.html \
+    && grep -Fq "preferred_url_" /app/templates/servers/plex_discovery.html
+
+# SQL seeds
+COPY tables.sql /app/tables.sql
+#COPY default_data.sql /app/default_data.sql
+
+# Entrypoint + INFO
+COPY entrypoint.sh /app/entrypoint.sh
+COPY run.py /app/run.py
+COPY INFO /app/INFO
+RUN chmod 644 /app/INFO
+RUN grep -Eiq '^VERSION=v?[0-9]+\.[0-9]+\.[0-9]+([[:space:]._-]+(b|build)[0-9]+)?$' /app/INFO
+
+
+# Ensure entrypoint executable
+RUN chmod +x /app/entrypoint.sh
+
+EXPOSE 5000
+
+CMD ["/app/entrypoint.sh"]
+

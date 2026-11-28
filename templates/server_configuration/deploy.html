@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% set active_page = "server_configuration" %}
+
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/server-configuration.css', v=g.app_version|default('dev')) }}">{% endblock %}
+{% block header_title %}{{ t("server_config_title") }}{% endblock %}
+{% block header_subtitle %}{{ t("config_deploy_subtitle") }}{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  {% include "server_configuration/_nav.html" %}
+
+  <section data-config-mode class="bg-slate-900 p-6 rounded-xl border border-slate-800 space-y-4">
+    <div>
+      <h2 class="text-lg font-semibold text-slate-200">{{ t("config_mode_title") }}</h2>
+      <p class="text-sm text-slate-400 mt-1">{{ t("config_mode_help") }}</p>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+      {% for item in ("monitoring", "manual", "auto") %}
+      <div class="rounded-lg border p-4 {% if mode == item %}border-primary bg-slate-950{% else %}border-slate-800{% endif %}">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-sm font-semibold text-slate-100">{{ t("config_mode_" ~ item) }}</span>
+          {% if mode == item %}<span class="px-2 py-0.5 rounded-full text-xs bg-emerald-900/40 text-emerald-300">{{ t("config_mode_active") }}</span>{% endif %}
+        </div>
+        <p class="text-xs text-slate-400 mt-2">{{ t("config_mode_" ~ item ~ "_help") }}</p>
+        {% if item == "auto" %}
+        <p class="text-xs text-slate-500 mt-3">{{ t("config_mode_auto_later") }}</p>
+        {% elif mode != item %}
+        <form method="POST" action="{{ url_for('server_configuration_mode') }}" class="mt-3"
+              {% if item == "manual" %}data-confirm="{{ t('config_mode_manual_confirm') }}" data-confirm-title="{{ t('config_mode_manual') }}" data-confirm-label="{{ t('config_mode_enable') }}"{% endif %}>
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="mode" value="{{ item }}">
+          <button type="submit" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200">{{ t("config_mode_enable") }}</button>
+        </form>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="bg-slate-900 p-6 rounded-xl border border-slate-800 space-y-4">
+    <div>
+      <h2 class="text-lg font-semibold text-slate-200">{{ t("config_deploy_new") }}</h2>
+      <p class="text-sm text-slate-400 mt-1">{{ t("config_deploy_new_help") }}</p>
+    </div>
+    <form method="POST" action="{{ url_for('server_configuration_deploy_plan') }}" class="space-y-4" data-config-plan-form>
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+      <div>
+        <label for="config-deploy-source" class="block text-sm mb-1 text-slate-300">{{ t("config_deploy_source") }}</label>
+        <select id="config-deploy-source" name="source" required class="w-full md:w-auto bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+          {% if profiles %}<optgroup label="{{ t('config_tab_profiles') }}">
+            {% for profile in profiles %}<option value="profile:{{ profile.id }}">{{ profile.name }} ({{ "Plex" if profile.provider == "plex" else "Jellyfin" }})</option>{% endfor %}
+          </optgroup>{% endif %}
+          {% if servers %}<optgroup label="{{ t('config_deploy_source_servers') }}">
+            {% for server in servers %}<option value="server:{{ server.id }}">{{ server.name }} ({{ "Plex" if server.type == "plex" else "Jellyfin" }})</option>{% endfor %}
+          </optgroup>{% endif %}
+        </select>
+      </div>
+      <fieldset>
+        <legend class="block text-sm mb-2 text-slate-300">{{ t("config_deploy_targets") }}</legend>
+        <p class="text-xs text-slate-500 mb-2">{{ t("config_deploy_targets_help").format(max=max_servers) }}</p>
+        <div class="flex flex-wrap gap-2">
+          <label class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-800 bg-slate-950 text-sm text-slate-200 cursor-pointer">
+            <input type="checkbox" name="everyone" value="1" class="w-4 h-4 rounded border-slate-600 bg-slate-800">{{ t("config_deploy_everyone") }}
+          </label>
+          {% for group in groups %}
+          <label class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-800 bg-slate-950 text-sm text-slate-200 cursor-pointer">
+            <input type="checkbox" name="group_ids" value="{{ group.id }}" class="w-4 h-4 rounded border-slate-600 bg-slate-800">{{ group.name }}
+          </label>
+          {% endfor %}
+          {% for server in servers %}
+          <label class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-800 bg-slate-950 text-sm text-slate-200 cursor-pointer">
+            <input type="checkbox" name="server_ids" value="{{ server.id }}" class="w-4 h-4 rounded border-slate-600 bg-slate-800">{{ server.name }}
+            {% with badge_type = server.type %}{% include "server_configuration/_type_badge.html" %}{% endwith %}
+          </label>
+          {% endfor %}
+        </div>
+      </fieldset>
+      <label class="flex items-start gap-2 text-sm text-slate-200">
+        <input type="checkbox" name="include_risky" value="1" class="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-800">
+        <span>{{ t("config_deploy_include_risky") }}<span class="block text-xs text-amber-300 mt-1">{{ t("config_deploy_include_risky_help") }}</span></span>
+      </label>
+      <div class="flex flex-wrap items-center gap-3">
+        <button type="submit" class="px-4 py-2 bg-primary hover:bg-primary-dark rounded text-white text-sm"
+                data-loading-label="{{ t('config_compare_loading') }}">{{ t("config_deploy_preview") }}</button>
+        <span class="text-xs text-slate-500">{{ t("config_deploy_preview_help") }}</span>
+      </div>
+    </form>
+  </section>
+
+  <section class="bg-slate-900 rounded-xl border border-slate-800">
+    <h2 class="text-lg font-semibold text-slate-200 px-6 pt-6 pb-2">{{ t("config_deploy_history") }}</h2>
+    {% if deployments %}
+    <ul class="divide-y divide-slate-800">
+      {% for item in deployments %}
+      <li data-config-deployment="{{ item.id }}" class="px-6 py-3 flex flex-wrap items-center justify-between gap-3 text-sm">
+        <a href="{{ url_for('server_configuration_deployment', deployment_id=item.id) }}" class="text-slate-200 hover:text-primary">
+          {{ t("config_deploy_kind_" ~ item.kind) }} · {{ item.source_name }}
+        </a>
+        <span class="text-xs text-slate-400 flex flex-wrap items-center gap-3">
+          <span>{{ t("config_deploy_status_" ~ item.status) }}</span>
+          <span>{{ t("config_deploy_history_counts").format(servers=item.servers or 0, verified=item.verified or 0, failed=item.failed or 0) }}</span>
+          <span>{{ item.confirmed_at|browser_datetime }}</span>
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="px-6 pb-4 text-sm text-slate-400">{{ t("config_deploy_history_empty") }}</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ url_for('static', filename='js/pages/server-configuration.js', v=g.app_version|default('dev')) }}"></script>
+  {% include "partials/confirm_modal.html" %}
+{% endblock %}

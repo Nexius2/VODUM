@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+{% set active_page = 'communications' %}
+
+{% block title %}{{ t("communications") }} - VODUM{% endblock %}
+{% block header_title %}{{ t("communications") }}{% endblock %}
+{% block header_subtitle %}{{ t("communications_subtitle") }}{% endblock %}
+
+{% block content %}
+
+{% set current_subpage = 'campaigns' %}
+{% include "communications/_communications_nav.html" %}
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+  <!-- LEFT : editor -->
+  <div class="lg:col-span-1 bg-slate-900 border border-slate-800 rounded-2xl p-4">
+
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-sm font-semibold">
+        {% if loaded_campaign %}{{ t('comm_campaign_edit') }}{% else %}{{ t('comm_campaign_new') }}{% endif %}
+      </h2>
+
+      <div class="flex items-center gap-2">
+        <span class="text-[11px] text-slate-400">{{ t('use_for_test') }}</span>
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" id="campaign_test_switch" class="sr-only peer" {% if loaded_campaign and loaded_campaign.is_test %}checked{% endif %}>
+          <div class="w-11 h-6 bg-slate-600 rounded-full peer-checked:bg-emerald-500 transition"></div>
+          <div class="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full transition peer-checked:translate-x-5"></div>
+        </label>
+      </div>
+    </div>
+    <p class="-mt-2 mb-4 text-[11px] text-slate-500">{{ t('comm_campaign_test_channel_help') }}</p>
+
+	<form method="post" action="{{ url_for('communications_campaigns_action') }}" enctype="multipart/form-data" class="space-y-4">
+	  <input type="hidden" name="form_mode" id="campaign_action" value="{% if loaded_campaign %}save{% else %}create{% endif %}">
+	  <input type="hidden" name="campaign_id" value="{{ loaded_campaign.id if loaded_campaign else '' }}">
+      <input type="hidden" name="is_test" id="is_test" value="{{ 1 if loaded_campaign and loaded_campaign.is_test else 0 }}">
+
+      <div class="text-xs">
+        <label class="block mb-1">{{ t('name') }}</label>
+        <input type="text" name="name" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs" value="{{ loaded_campaign.name if loaded_campaign else '' }}" required>
+      </div>
+
+      <div class="text-xs">
+        <label for="campaign-user-scope" class="block mb-1">{{ t('comm_campaign_audience') }}</label>
+        {% set campaign_user_scope = loaded_campaign.user_scope if loaded_campaign else 'active' %}
+        <select id="campaign-user-scope" name="user_scope" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-2 text-sm">
+          <option value="active" {% if campaign_user_scope == 'active' %}selected{% endif %}>{{ t('comm_campaign_active_users') }}</option>
+          <option value="all" {% if campaign_user_scope != 'active' %}selected{% endif %}>{{ t('all_users') }}</option>
+        </select>
+        <p class="mt-1 text-[11px] text-slate-400">{{ t('comm_campaign_active_users_help') }}</p>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div class="text-xs">
+          <label class="block mb-1">{{ t('target_server') }}</label>
+          <select name="server_id" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+            <option value="">{{ t('all_servers') }}</option>
+            {% for s in servers %}
+              <option value="{{ s.id }}" {% if loaded_campaign and loaded_campaign.server_id==s.id %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="text-xs">
+          <label class="block mb-1">{{ t('comm_trigger_provider') }}</label>
+          {% set campaign_provider = (loaded_campaign.trigger_provider if loaded_campaign and loaded_campaign.trigger_provider else 'all') %}
+          <select name="trigger_provider" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+            <option value="all" {% if campaign_provider == 'all' %}selected{% endif %}>{{ t('comm_provider_all') }}</option>
+            <option value="plex" {% if campaign_provider == 'plex' %}selected{% endif %}>{{ t("plex") }}</option>
+            <option value="jellyfin" {% if campaign_provider == 'jellyfin' %}selected{% endif %}>{{ t("jellyfin") }}</option>
+          </select>
+        </div>
+
+        <div class="text-xs">
+          <label class="block mb-1">{{ t('comm_subscription_target') }}</label>
+          {% set campaign_sub_scope = (loaded_campaign.subscription_scope if loaded_campaign and loaded_campaign.subscription_scope else 'none') %}
+          {% set campaign_sub_id = (loaded_campaign.subscription_template_id if loaded_campaign and loaded_campaign.subscription_template_id is not none else None) %}
+          <select name="subscription_scope_value" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+            <option value="none" {% if campaign_sub_scope == 'none' %}selected{% endif %}>{{ t('comm_subscription_none') }}</option>
+            <option value="all" {% if campaign_sub_scope == 'all' %}selected{% endif %}>{{ t('comm_subscription_all') }}</option>
+            {% for sub in subscription_templates %}
+              <option value="subscription:{{ sub.id }}"
+                      {% if campaign_sub_scope == 'specific' and campaign_sub_id == sub.id %}selected{% endif %}>
+                {{ sub.name }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      {% with selected_delivery_channels=loaded_campaign.delivery_channels if loaded_campaign and loaded_campaign.delivery_channels else 'inherit' %}
+        {% include "communications/_delivery_channels.html" %}
+      {% endwith %}
+
+      <div class="text-xs">
+        <label class="block mb-1">{{ t('subject') }}</label>
+        <input type="text" name="subject" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs" value="{{ loaded_campaign.subject if loaded_campaign else '' }}" required>
+        <p class="mt-1 text-[11px] text-slate-500">{{ t('comm_subject_help') }}</p>
+      </div>
+
+      <div class="text-xs">
+        <label class="block mb-1">{{ t('body') }}</label>
+        <textarea id="campaign_body" name="body" rows="14" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-2 text-xs resize-none" required>{{ loaded_campaign.body if loaded_campaign else '' }}</textarea>
+        <div id="campaign_discord_counter" data-label="{{ t('comm_discord_body_counter') }}" class="mt-1 text-[11px] text-slate-500" hidden></div>
+        <p class="text-[11px] text-slate-500 mt-2">
+          {{ t('comm_vars_help') }}
+          <code>{username}</code>, <code>{email}</code>, <code>{expiration_date}</code>, <code>{portal_login_url}</code>
+        </p>
+      </div>
+
+      <div class="text-xs">
+        <label class="block mb-1">{{ t('attachments') }}</label>
+        <input type="file" name="attachments" multiple class="w-full text-xs text-slate-300">
+        <p class="mt-1 text-[11px] text-slate-500">{{ t('comm_attachments_help') }}</p>
+
+        {% if loaded_campaign and loaded_campaign.attachments %}
+          <div class="mt-2 space-y-1">
+            {% for a in loaded_campaign.attachments %}
+              <div class="text-[11px] text-slate-400">📎 {{ a.filename }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+
+      <div class="flex flex-wrap gap-2">
+		<button
+		  type="submit"
+		  name="action"
+		  value="{% if loaded_campaign %}save{% else %}create{% endif %}"
+		  class="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-dark text-xs font-medium">
+		  {% if loaded_campaign %}{{ t('save') }}{% else %}{{ t('create') }}{% endif %}
+		</button>
+
+        {% if not loaded_campaign %}
+          <span class="text-[11px] text-slate-500 self-center">
+            {{ t('comm_campaign_create_then_send_hint') }}
+          </span>
+        {% endif %}
+
+        {% if loaded_campaign %}
+          <button type="submit" name="action" value="send" class="px-3 py-1.5 rounded-lg bg-emerald-700/60 hover:bg-emerald-700 text-xs font-medium">
+            {{ t('send') }}
+          </button>
+
+			<button type="button"
+			  class="px-3 py-1.5 rounded-lg bg-rose-700/50 hover:bg-rose-700 text-xs font-medium"
+			  data-campaign-delete-open>
+			  {{ t('delete') }}
+			</button>
+
+          <a href="{{ url_for('communications_campaigns_page') }}" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium">
+            {{ t('new') }}
+          </a>
+        {% endif %}
+      </div>
+
+    </form>
+
+  </div>
+
+  <!-- RIGHT : list -->
+  <div class="lg:col-span-2">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+      <table class="w-full text-xs">
+        <thead class="bg-slate-950/60 text-slate-400 text-left">
+          <tr>
+            <th class="px-4 py-2">{{ t('name') }}</th>
+            <th class="px-4 py-2">{{ t('subject') }}</th>
+            <th class="px-4 py-2">{{ t('server') }}</th>
+            <th class="px-4 py-2">{{ t('comm_trigger_provider') }}</th>
+            <th class="px-4 py-2">{{ t('comm_subscription_target') }}</th>
+            <th class="px-4 py-2">{{ t('is_test') }}</th>
+            <th class="px-4 py-2">{{ t('status') }}</th>
+            <th class="px-4 py-2">{{ t('created_at') }}</th>
+            <th class="px-4 py-2">{{ t('sent_at') }}</th>
+            <th class="px-4 py-2"></th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for c in campaigns %}
+          <tr class="border-t border-slate-800 hover:bg-slate-800/40">
+            <td class="px-4 py-2">{{ c.name }}<small class="block text-xs text-slate-400">{{ t('comm_campaign_active_users') if c.user_scope == 'active' else t('all_users') }}</small></td>
+            <td class="px-4 py-2">{{ c.subject }}</td>
+            <td class="px-4 py-2">
+              {% if not c.server_id %}
+                <span class="text-emerald-300">{{ t('all_servers') }}</span>
+              {% else %}
+                {{ c.server_id }}
+              {% endif %}
+            </td>
+            <td class="px-4 py-2">
+              {% if c.trigger_provider == 'plex' %}Plex
+              {% elif c.trigger_provider == 'jellyfin' %}Jellyfin
+              {% else %}{{ t('comm_provider_all') }}
+              {% endif %}
+            </td>
+            <td class="px-4 py-2">
+              {% if c.subscription_scope == 'specific' and c.subscription_template_name %}
+                {{ c.subscription_template_name }}
+              {% elif c.subscription_scope == 'all' %}
+                {{ t('comm_subscription_all') }}
+              {% else %}
+                {{ t('comm_subscription_none') }}
+              {% endif %}
+            </td>
+            <td class="px-4 py-2">{% if c.is_test %}<span class="text-emerald-300">{{ t('yes') }}</span>{% else %}<span class="text-slate-400">{{ t('no') }}</span>{% endif %}</td>
+            <td class="px-4 py-2">
+				{% set colors = {
+				  'draft': 'bg-slate-800 text-slate-300',
+				  'pending': 'bg-slate-800 text-slate-300',
+				  'sending': 'bg-blue-900/40 text-blue-300',
+				  'finished': 'bg-emerald-900/40 text-emerald-300',
+				  'error': 'bg-rose-900/40 text-rose-300'
+				} %}
+              <span class="px-2 py-1 rounded-full {{ colors.get(c.status, 'bg-slate-700 text-slate-300') }}">{{ t(c.status) }}</span>
+            </td>
+			<td class="px-4 py-2">{{ c.created_at|browser_datetime if c.created_at else t('not_available') }}</td>
+			<td class="px-4 py-2">{{ c.sent_at|browser_datetime if c.sent_at else t('not_available') }}</td>
+            <td class="px-4 py-2 text-right">
+              <a href="{{ url_for('communications_campaigns_page', load=c.id) }}" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700">{{ t('open') }}</a>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- Delete Modal -->
+<div id="deleteModal" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 p-4">
+  <div class="bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-w-sm shadow-xl">
+    <h3 class="text-sm font-semibold mb-6">
+      {{ t('confirm_delete') }}
+    </h3>
+
+    <div class="flex justify-end gap-2">
+      <button type="button"
+        data-campaign-delete-close
+        class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-xs font-medium">
+        {{ t('cancel') }}
+      </button>
+
+      <button type="button"
+        data-campaign-delete-confirm
+        class="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-xs font-medium">
+        {{ t('delete') }}
+      </button>
+    </div>
+  </div>
+</div>
+
+
+<script src="{{ url_for('static', filename='js/pages/communications-campaigns.js', v=g.app_version|default('dev')) }}"></script>
+
+{% endblock %}

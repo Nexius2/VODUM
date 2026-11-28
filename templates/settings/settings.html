@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% set active_page = "settings" %}
+
+{% block header_title %}{{ t("settings") }}{% endblock %}
+{% block header_subtitle %}{{ t("settings_subtitle") }}{% endblock %}
+
+{% block header_actions %}
+<button type="submit" form="settings-form"
+        class="px-4 py-2 bg-primary hover:bg-primary-dark rounded text-white text-sm">
+  {{ t("save") }}
+</button>
+{% endblock %}
+
+{% block content %}
+<form method="POST" action="{{ url_for('settings_save') }}" enctype="multipart/form-data" id="settings-form" class="grid grid-cols-1 items-start xl:grid-cols-2 gap-8">
+
+  <div class="space-y-8">
+    {% include "settings/partials/_settings_general.html" %}
+    {% include "settings/partials/_settings_security.html" %}
+  </div>
+  <div class="space-y-8">
+    {% include "settings/partials/_settings_system.html" %}
+    {% include "settings/partials/_settings_api.html" %}
+  </div>
+
+</form>
+
+{% include "settings/partials/_settings_api_forms.html" %}
+
+<form id="plex-auth-link-form" method="post" action="{{ url_for('plex_auth_link_start') }}" class="hidden">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="action" value="{{ 'replace' if plex_auth_identity else 'link' }}">
+</form>
+{% if plex_auth_identity %}
+<form id="plex-auth-unlink-form" method="post" action="{{ url_for('plex_auth_unlink') }}" class="hidden">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+</form>
+{% endif %}
+
+<div id="admin-security-modal" data-settings-modal-backdrop class="hidden fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-0 sm:p-4" aria-hidden="true">
+  <div class="vodum-modal-viewport flex h-[100dvh] w-full max-w-4xl flex-col overflow-hidden rounded-none border border-slate-700 bg-slate-900 sm:h-auto sm:rounded-xl">
+    <div class="flex shrink-0 items-start justify-between border-b border-slate-800 bg-slate-900 px-4 py-4 sm:px-6 sm:py-5">
+      <div>
+        <h3 class="text-lg font-semibold text-white">{{ t("app_security") }}</h3>
+        <p class="text-xs text-slate-400 mt-1">{{ t("app_security_help") }}</p>
+      </div>
+      <button type="button"
+              data-vodum-modal-close
+              data-settings-modal-close="admin-security-modal"
+              class="text-slate-400 hover:text-white text-xs leading-none">{{ t("common.close") }}</button>
+    </div>
+
+    <div class="vodum-modal-scroll flex-1 px-4 py-4 sm:px-6 sm:py-5">
+
+    <form id="admin-security-settings-form" method="POST" action="{{ url_for('settings_security_save') }}" class="space-y-5">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm mb-1 text-slate-300">{{ t("auth.admin_email") }}</label>
+          <input type="email" name="admin_email" value="{{ settings.admin_email or '' }}" required class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm mb-1 text-slate-300">{{ t("current_password") }}</label>
+          <input type="password" name="current_password" required autocomplete="current-password" class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm mb-1 text-slate-300">{{ t("new_password") }}</label>
+          <input type="password" name="new_password" autocomplete="new-password" class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm mb-1 text-slate-300">{{ t("confirm_password") }}</label>
+          <input type="password" name="confirm_password" autocomplete="new-password" class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+        </div>
+      </div>
+
+      <div class="border-t border-slate-800 pt-4">
+        <label class="flex items-start gap-3 text-sm text-slate-300 cursor-pointer">
+          <input type="checkbox" id="admin-totp-enabled" name="admin_totp_enabled" value="1" {% if settings.admin_totp_enabled %}checked{% endif %} class="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-800">
+          <span>
+            <span class="block text-slate-200">{{ t("two_factor_auth") }}</span>
+            <span class="block text-xs text-slate-500 mt-1">{{ t("two_factor_auth_help") }}</span>
+          </span>
+        </label>
+
+          <label id="admin-totp-local-trust-option" class="flex items-start gap-3 text-sm text-slate-300 mt-4 pl-7 {% if settings.admin_totp_enabled %}cursor-pointer{% else %}cursor-not-allowed opacity-50{% endif %}">
+            <input type="checkbox" id="admin-totp-local-trust-enabled" name="admin_totp_local_trust_enabled" value="1" {% if settings.admin_totp_enabled and settings.admin_totp_local_trust_enabled %}checked{% endif %} {% if not settings.admin_totp_enabled %}disabled{% endif %} class="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-800 disabled:cursor-not-allowed">
+            <span>
+              <span class="block text-slate-200">{{ t("totp_local_trust_30_days") }}</span>
+              <span class="block text-xs text-slate-500 mt-1">{{ t("totp_local_trust_30_days_help") }}</span>
+            </span>
+          </label>
+        {% if not settings.admin_totp_enabled %}
+          <div class="mt-4 rounded-lg border border-slate-800 bg-slate-950 p-3 space-y-3">
+            <div>
+              <div class="text-xs text-slate-400 mb-1">{{ t("totp_secret") }}</div>
+              <code class="block text-sm text-emerald-300 break-all">{{ pending_totp_secret }}</code>
+            </div>
+			<div>
+			  <div class="text-xs text-slate-400 mb-2">{{ t("totp_scan_qr") }}</div>
+
+			  <div class="flex flex-col md:flex-row gap-4 items-start">
+				<div class="bg-white rounded-lg p-3">
+				  <div id="totp-qr-code" class="w-[180px] h-[180px]"></div>
+				</div>
+
+				<div class="flex-1">
+				  <p class="text-xs text-slate-400 mb-3">
+					{{ t("totp_qr_help") }}
+				  </p>
+
+				  <div class="text-xs text-slate-400 mb-1">{{ t("totp_manual_key") }}</div>
+				  <code class="block text-sm text-emerald-300 break-all">{{ pending_totp_secret }}</code>
+
+				  <code id="totp-uri-value" class="hidden">{{ pending_totp_uri }}</code>
+				</div>
+			  </div>
+			</div>
+            <div>
+              <label class="block text-sm mb-1 text-slate-300">{{ t("totp_code") }}</label>
+              <input type="text" name="totp_code" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+            </div>
+          </div>
+        {% endif %}
+        <label class="flex items-start gap-3 text-sm text-slate-300 mt-4 cursor-pointer">
+          <input type="checkbox" name="plex_require_vodum_totp" value="1" {% if plex_require_vodum_totp %}checked{% endif %} {% if not settings.admin_totp_enabled %}disabled{% endif %} class="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-800 disabled:cursor-not-allowed">
+          <span>
+            <span class="block text-slate-200">{{ t("plex_auth_require_vodum_totp") }}</span>
+            <span class="block text-xs text-slate-500 mt-1">{{ t("plex_auth_require_vodum_totp_help") }}</span>
+          </span>
+        </label>
+        <div class="mt-5 border-t border-slate-800 pt-5 space-y-4">
+          <label class="flex items-start gap-3 text-sm"><input type="checkbox" name="turnstile_enabled" value="1" {% if settings.turnstile_enabled %}checked{% endif %} class="mt-0.5"><span><span class="block text-slate-200">{{ t("turnstile_title") }}</span><span class="block text-xs text-slate-500">{{ t("turnstile_help") }}</span></span></label>
+          <div class="grid gap-4 md:grid-cols-2"><label class="text-sm text-slate-300">{{ t("turnstile_site_key") }}<input name="turnstile_site_key" value="{{ settings.turnstile_site_key or '' }}" class="mt-1 w-full rounded border border-slate-700 bg-slate-800 px-3 py-2"></label><label class="text-sm text-slate-300">{{ t("turnstile_secret_key") }}<input type="password" name="turnstile_secret_key" placeholder="{{ '••••••••' if settings.turnstile_secret_key else '' }}" autocomplete="new-password" class="mt-1 w-full rounded border border-slate-700 bg-slate-800 px-3 py-2"></label></div>
+          <div class="grid gap-4 md:grid-cols-2"><label class="text-sm text-slate-300">{{ t("turnstile_mode") }}<select name="turnstile_mode" class="mt-1 w-full rounded border border-slate-700 bg-slate-800 px-3 py-2"><option value="compact" {% if settings.turnstile_mode=='compact' %}selected{% endif %}>{{ t('turnstile_mode_compact') }}</option><option value="invisible" {% if settings.turnstile_mode=='invisible' %}selected{% endif %}>{{ t('turnstile_mode_invisible') }}</option></select></label><label class="mt-6 flex items-center gap-2 text-sm"><input type="checkbox" name="turnstile_protect_portal" value="1" {% if settings.turnstile_protect_portal %}checked{% endif %}>{{ t("turnstile_protect_portal") }}</label></div>
+          <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="turnstile_protect_admin" value="1" {% if settings.turnstile_protect_admin %}checked{% endif %}>{{ t("turnstile_protect_admin") }}</label>
+          <p class="text-xs text-slate-500">{{ t("turnstile_local_recovery") }}</p>
+          {% if settings.turnstile_enabled and settings.turnstile_site_key and settings.turnstile_secret_key %}<div class="cf-turnstile" data-sitekey="{{ settings.turnstile_site_key }}" data-size="compact"></div><button type="submit" formmethod="post" formaction="{{ url_for('settings_turnstile_test') }}" class="rounded bg-slate-700 px-3 py-2 text-sm">{{ t("turnstile_test") }}</button>{% endif %}
+        </div>
+      </div>
+
+    </form>
+    </div>
+    <div class="flex shrink-0 justify-end gap-2 border-t border-slate-700 bg-slate-900 px-4 py-3 sm:px-6 sm:py-4">
+      <button type="button" data-vodum-modal-close data-settings-modal-close="admin-security-modal" class="px-4 py-2 rounded bg-slate-800 hover:bg-slate-700 text-sm">{{ t("common.close") }}</button>
+      <button type="submit" form="admin-security-settings-form" class="px-4 py-2 bg-primary hover:bg-primary-dark rounded text-white text-sm">{{ t("save") }}</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ url_for('static', filename='vendor/qrcode/qrcode.min.js', v=g.app_version|default('dev')) }}"></script>
+  {% if settings.turnstile_enabled %}<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>{% endif %}
+  <script src="{{ url_for('static', filename='js/pages/settings.js', v=g.app_version|default('dev')) }}"></script>
+  {% include "partials/confirm_modal.html" %}
+{% endblock %}

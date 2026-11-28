@@ -1,0 +1,541 @@
+{% set embed = request.args.get('embed') == '1' %}
+{% extends "base_embed.html" if embed else "base.html" %}
+
+
+{% block title %}{{ t("monitoring") }} · {{ t("user") }}{% endblock %}
+{% block header_title %}{{ t("monitoring") }}{% endblock %}
+{% block header_subtitle %}{{ t("monitoring_user_detail") }}{% endblock %}
+
+{% block head %}
+  <script src="{{ url_for('static', filename='vendor/chart.js/chart.umd.min.js', v=g.app_version|default('dev')) }}"></script>
+{% endblock %}
+
+{% block content %}
+{% if not embed %}
+  {% include "monitoring/partials/_tabs.html" %}
+{% endif %}
+<div id="monitoring-user-detail">
+{% set historical_snapshot = statistics_snapshot|default(none) %}
+{% if historical_snapshot and not historical_snapshot.ready %}
+<div class="mb-4 rounded-lg border border-slate-700 bg-slate-900 p-3 text-sm text-slate-400" role="status"
+  {% if not historical_snapshot.queue_full %}hx-get="{{ request.full_path }}" hx-trigger="every 10s" hx-select="#monitoring-user-detail"
+  hx-target="#monitoring-user-detail" hx-swap="outerHTML"{% endif %}>
+  {{ t('monitoring_statistics_queue_full') if historical_snapshot.queue_full else t('monitoring_statistics_pending') }}
+  {% if historical_snapshot.failed %}<span class="text-amber-300">{{ t('monitoring_statistics_failed') }}</span>{% endif %}
+</div>
+{% elif historical_snapshot and view != 'history' and (historical_snapshot.failed or historical_snapshot.stale) %}
+<p class="mb-4 text-xs text-amber-300">{{ t('monitoring_statistics_failed') if historical_snapshot.failed else t('monitoring_statistics_stale') }}</p>
+{% endif %}
+
+
+
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 mb-6">
+  <div class="flex items-center justify-between gap-6">
+    <div>
+      <div class="text-sm text-slate-400">{{ t("user") }}</div>
+      <div class="text-xl font-semibold">{{ user.username or "-" }}</div>
+
+      <div class="text-xs text-slate-500 mt-1">
+        IDs :
+        {% if user.ids_by_type %}
+          {% for t, ids in user.ids_by_type.items() %}
+            <span class="text-slate-300">{{ t }}={{ ids|join(',') }}</span>{% if not loop.last %} · {% endif %}
+          {% endfor %}
+        {% else %}
+          <span class="text-slate-300">{{ user.id }}</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="text-right text-xs text-slate-400">
+      <div>{{ t("monitoring_user_total_plays") }}: <span class="text-slate-200">{{ user.total_plays or 0 }}</span></div>
+      <div>{{ t("monitoring_user_watch_time") }}: <span class="text-slate-200">{{ user.watch_time or "0h 0m" }}</span></div>
+      <div>{{ t("monitoring_user_last_watch") }}: <span class="text-slate-200">{{ user.last_watch_at or "-" }}</span></div>
+    </div>
+  </div>
+</div>
+
+{# --------------------------
+   Sous-onglets
+   -------------------------- #}
+<div class="mb-6 relative z-10">
+  <div class="flex flex-wrap gap-2 border-b border-slate-800 pb-2">
+    {% set args = dict(request.args) %}
+    {% set _ = args.pop("page", None) %}
+
+    <a class="px-4 py-2 text-sm rounded-t-xl border border-b-0
+              {{ 'bg-slate-900 border-slate-800 text-emerald-400 font-semibold' if view=='profile' else 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200' }}"
+       href="{{ url_for('monitoring_user_detail', user_id=user.id, view='profile', embed='1') if embed else url_for('monitoring_user_detail', user_id=user.id, view='profile') }}">
+      {{ t("monitoring_user_profile") }}
+    </a>
+
+    <a class="px-4 py-2 text-sm rounded-t-xl border border-b-0
+              {{ 'bg-slate-900 border-slate-800 text-emerald-400 font-semibold' if view=='history' else 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200' }}"
+       href="{{ url_for('monitoring_user_detail', user_id=user.id, view='history', embed='1') if embed else url_for('monitoring_user_detail', user_id=user.id, view='history') }}">
+       {{ t("history") }}
+    </a>
+
+    <a class="px-4 py-2 text-sm rounded-t-xl border border-b-0
+              {{ 'bg-slate-900 border-slate-800 text-emerald-400 font-semibold' if view=='ip' else 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200' }}"
+       href="{{ url_for('monitoring_user_detail', user_id=user.id, view='ip', embed='1') if embed else url_for('monitoring_user_detail', user_id=user.id, view='ip') }}">
+       {{ t("monitoring_user_ip_addresses") }}
+    </a>
+  </div>
+</div>
+
+{# ==========================
+   PROFILE
+   ========================== #}
+{% if view == "profile" and profile %}
+
+{% set s24 = profile.last_24h %}
+{% set s7  = profile.last_7d %}
+{% set s30 = profile.last_30d %}
+{% set sa  = profile.all_time %}
+{% set policy_hits = profile.get('policy_hits', {}) %}
+{% set peak_streams = profile.get('peak_streams', 0) %}
+
+{# ===== TOP ROW: stats left + insights right ===== #}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+
+  {# LEFT: summary + compact metrics #}
+  <div class="space-y-4 lg:col-span-1">
+
+    {# Grande bulle résumé #}
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+      <div class="text-xs uppercase tracking-wide text-slate-400 mb-4">
+        {{ t("monitoring_user_activity") }}
+		<span class="text-xs text-slate-500 font-normal lowercase">{{ t("monitoring_user_activity_help") }}</span>
+      </div>
+
+
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+        <div class="rounded-xl border border-slate-800/80 bg-slate-950/40 px-3 py-3">
+          <div class="text-[11px] tracking-wide text-slate-500">{{ t("monitoring_user_plays_24h") }}:</div>
+          <div class="mt-2 text-2xl font-semibold text-white">{{ s24.plays }}</div>
+          <div class="mt-1 text-xs text-slate-500">{{ t("monitoring_user_watch_time") }}:<br>{{ s24.watch_time }}</div>
+        </div>
+
+        <div class="rounded-xl border border-slate-800/80 bg-slate-950/40 px-3 py-3">
+          <div class="text-[11px] tracking-wide text-slate-500">{{ t("monitoring_user_plays_7d") }}:</div>
+          <div class="mt-2 text-2xl font-semibold text-white">{{ s7.plays }}</div>
+          <div class="mt-1 text-xs text-slate-500">{{ t("monitoring_user_watch_time") }}:<br>{{ s7.watch_time }}</div>
+        </div>
+
+        <div class="rounded-xl border border-slate-800/80 bg-slate-950/40 px-3 py-3">
+          <div class="text-[11px] tracking-wide text-slate-500">{{ t("monitoring_user_plays_30d") }}:</div>
+          <div class="mt-2 text-2xl font-semibold text-white">{{ s30.plays }}</div>
+          <div class="mt-1 text-xs text-slate-500">{{ t("monitoring_user_watch_time") }}:<br>{{ s30.watch_time }}</div>
+        </div>
+
+        <div class="rounded-xl border border-slate-800/80 bg-slate-950/40 px-3 py-3">
+          <div class="text-[11px] tracking-wide text-slate-500">{{ t("monitoring_user_plays_all") }}:</div>
+          <div class="mt-2 text-2xl font-semibold text-white">{{ sa.plays }}</div>
+          <div class="mt-1 text-xs text-slate-500">{{ t("monitoring_user_watch_time") }}:<br>{{ sa.watch_time }}</div>
+        </div>
+      </div>
+    </div>
+
+    {# Ligne des 2 petites bulles #}
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+        <div class="text-xs uppercase tracking-wide text-slate-400">{{ t("monitoring_user_policy_stops") }}</div>
+        <div class="mt-2 text-3xl font-semibold text-rose-300">
+          {{ policy_hits.get('kills', 0) }}
+        </div>
+        <div class="mt-1 text-xs text-slate-500">
+          {{ t("monitoring_user_warnings") }}: {{ policy_hits.get('warns', 0) }}
+        </div>
+        <div class="mt-2 text-[11px] text-slate-600 truncate">
+          {{ t("monitoring_user_last") }}: {{ policy_hits.get('last_hit_at', '-') }}
+        </div>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+        <div class="text-xs uppercase tracking-wide text-slate-400">{{ t("monitoring_user_max_simultaneous") }}</div>
+        <div class="mt-2 text-3xl font-semibold text-emerald-300">
+          {{ peak_streams or 0 }}
+        </div>
+        <div class="mt-1 text-xs text-slate-500">
+          {{ t("monitoring_user_peak_streams") }}
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  {# RIGHT: Insights big card (2 donuts if server_usage_30d_show) #}
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 lg:col-span-2">
+    <div class="text-sm font-semibold mb-4">{{ t("monitoring_user_insights_30d") }}</div>
+
+    {% if user.server_usage_30d_show %}
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+
+        {# Media types donut + legend #}
+        <div class="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
+          <div class="w-[230px] max-w-full h-[180px] shrink-0 mx-auto sm:mx-0">
+            <canvas id="chartMediaTypes"></canvas>
+          </div>
+          <div class="min-w-0">
+            <div class="text-sm font-semibold mb-2">{{ t("monitoring_user_media_types") }}</div>
+            {% if user.media_types_30d_show %}
+              <div id="legendMediaTypes" class="space-y-1 text-xs text-slate-400"></div>
+            {% else %}
+              <div class="text-xs text-slate-500">{{ t("monitoring_user_no_data_30d") }}</div>
+            {% endif %}
+          </div>
+        </div>
+
+        {# Per server donut + legend #}
+        <div class="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
+          <div class="w-[230px] max-w-full h-[180px] shrink-0 mx-auto sm:mx-0">
+            <canvas id="chartServerUsage"></canvas>
+          </div>
+          <div class="min-w-0">
+            <div class="text-sm font-semibold mb-2">{{ t("monitoring_user_per_server") }}</div>
+            <div id="legendPerServer" class="space-y-1 text-xs text-slate-400"></div>
+          </div>
+        </div>
+
+      </div>
+
+    {% else %}
+      {# 1 donut only => plus compact, centré, pas de gros vide #}
+      <div class="flex items-center justify-center">
+        <div class="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6 max-w-3xl w-full">
+          <div class="w-[230px] max-w-full h-[180px] shrink-0 mx-auto sm:mx-0">
+            <canvas id="chartMediaTypes"></canvas>
+          </div>
+          <div class="min-w-0">
+            <div class="text-sm font-semibold mb-2">{{ t("monitoring_user_media_types") }}</div>
+            {% if user.media_types_30d_show %}
+              <div id="legendMediaTypes" class="space-y-1 text-xs text-slate-400"></div>
+            {% else %}
+              <div class="text-xs text-slate-500">{{ t("monitoring_user_no_data_30d") }}</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    {% endif %}
+
+  </div>
+</div>
+
+
+
+
+
+  {# Courbes du dessous #}
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+      <div class="text-sm font-semibold mb-3">{{ t("monitoring_user_plays_day_30d") }}</div>
+      <div class="relative w-full h-[320px]">
+        <canvas id="chartUserPlays" class="w-full h-full"></canvas>
+      </div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+      <div class="text-sm font-semibold mb-3">{{ t("monitoring_user_watch_day_30d") }}</div>
+      <div class="relative w-full h-[320px]">
+        <canvas id="chartUserWatch" class="w-full h-full"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="text-sm font-semibold mb-4">{{ t("monitoring_user_top_players") }}</div>
+
+    <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+      {% for p in profile.top_players %}
+        <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+          <div class="text-xs text-slate-400 truncate">{{ p.player }}</div>
+          <div class="mt-2 text-xl font-semibold text-amber-300">{{ p.plays }}</div>
+          <div class="text-xs text-slate-500">{{ t("monitoring_user_plays") }}</div>
+        </div>
+      {% endfor %}
+      {% if (profile.top_players|length) == 0 %}
+        <div class="text-slate-500">{{ t("monitoring_user_no_player_stats") }}</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <script type="application/json" id="monitoring-user-chart-config">
+    {
+      "mediaTypes30d": {{ (user.media_types_30d or []) | tojson }},
+      "serverUsage30d": {{ (user.server_usage_30d or []) | tojson }},
+      "preparingLabel": {{ t("monitoring_statistics_pending") | tojson }},
+      "failedLabel": {{ t("monitoring_statistics_failed") | tojson }},
+    "staleLabel": {{ t("monitoring_statistics_stale") | tojson }},
+      "queueFullLabel": {{ t("monitoring_statistics_queue_full") | tojson }},
+      "dailyUrl": {{ (url_for('api_monitoring_user_daily', user_id=user.id) ~ '?range=30d') | tojson }},
+      "playsLabel": {{ t("monitoring_user_plays")|tojson }},
+      "hoursLabel": {{ t("monitoring_user_hours")|tojson }}
+    }
+  </script>
+  <script src="{{ url_for('static', filename='js/pages/monitoring-user-detail.js', v=g.app_version|default('dev')) }}"></script>
+
+
+{% endif %}
+
+{# ==========================
+   HISTORY
+   ========================== #}
+{% if view == "history" %}
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="flex items-center justify-between mb-4">
+      <div class="text-sm font-semibold">{{ t("history") }}</div>
+      <div class="text-xs text-slate-400">{{ t("monitoring_user_rows_page") }}</div>
+    </div>
+
+    <form method="get" class="flex flex-wrap gap-3 mb-4">
+      <input type="hidden" name="view" value="history">
+      <input type="hidden" name="page" value="1">
+      <input name="q" value="{{ q or '' }}" placeholder="{{ t('monitoring_user_search_title') }}"
+             class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm w-full md:w-96">
+      <button class="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl px-4 py-2 text-sm">
+        {{ t("filter") }}
+      </button>
+    </form>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-left text-slate-400 border-b border-slate-800">
+            <th class="py-2 pr-4">{{ t("date") }}</th>
+            <th class="py-2 pr-4">{{ t("server") }}</th>
+            <th class="py-2 pr-4">{{ t("monitoring_user_media") }}</th>
+            <th class="py-2 pr-4">{{ t("type") }}</th>
+            <th class="py-2 pr-4">{{ t("monitoring_user_playback") }}</th>
+            <th class="py-2 pr-4">{{ t("device") }}</th>
+            <th class="py-2 pr-4">IP</th>
+            <th class="py-2 pr-4">{{ t("duration") }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+            <tr class="border-b border-slate-800">
+              <td class="py-3 pr-4 text-slate-300">{{ r.stopped_at|browser_datetime if r.stopped_at else "-" }}</td>
+              <td class="py-3 pr-4">
+                <div class="font-semibold">{{ r.server_name }}</div>
+                <div class="text-xs text-slate-500">{{ r.provider }}</div>
+              </td>
+              <td class="py-3 pr-4">
+                <div class="font-semibold">{{ r.title or "-" }}</div>
+                {% if r.grandparent_title %}
+                  <div class="text-xs text-slate-500">{{ r.grandparent_title }}</div>
+                {% endif %}
+              </td>
+              <td class="py-3 pr-4">{{ r.media_type or "-" }}</td>
+              <td class="py-3 pr-4">{{ r.playback_type or "-" }}</td>
+              <td class="py-3 pr-4">{{ r.device or "-" }}</td>
+              <td class="py-3 pr-4">{{ r.ip or "-" }}</td>
+              <td class="py-3 pr-4">{{ r.watch_time or "-" }}</td>
+            </tr>
+          {% endfor %}
+          {% if rows|length == 0 %}
+            <tr><td colspan="8" class="py-6 text-slate-500">{{ t("monitoring_user_no_results") }}</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if pagination %}
+      {% include "monitoring/partials/_pagination.html" %}
+    {% endif %}
+  </div>
+{% endif %}
+
+{# ==========================
+   IP ADDRESSES
+   ========================== #}
+{% if view == "ip" %}
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="flex items-center justify-between mb-4">
+      <div class="text-sm font-semibold">{{ t("monitoring_user_ip_addresses") }}</div>
+      <div class="text-xs text-slate-400">{{ t("monitoring_user_all_time") }}</div>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          {% set current_sort = request.args.get('sort') or 'last_seen' %}
+          {% set current_dir  = request.args.get('dir')  or 'desc' %}
+
+          {% macro th(label, key) %}
+            {% set active = (current_sort == key) %}
+            {% set next_dir = "asc" if (active and current_dir == "desc") else "desc" %}
+            {% set args = dict(request.args) %}
+            {% set _ = args.update({ "view": "ip", "sort": key, "dir": next_dir }) %}
+            <th class="py-2 pr-4">
+              <a href="{{ url_for('monitoring_user_detail', user_id=user.id, **args) }}"
+                 class="inline-flex items-center gap-2 {{ 'text-emerald-400 font-semibold' if active else 'text-slate-400' }}">
+                {{ label }}
+                {% if active %}
+                  {{ '▲' if current_dir == 'asc' else '▼' }}
+                {% else %}
+                  ↕
+                {% endif %}
+              </a>
+            </th>
+          {% endmacro %}
+
+          <tr class="text-left border-b border-slate-800">
+            {{ th("IP", "ip") }}
+            {{ th(t("monitoring_user_last_streamed"), "last_seen") }}
+            {{ th(t("monitoring_user_first_streamed"), "first_seen") }}
+            {{ th(t("monitoring_user_last_platform"), "last_platform") }}
+            {{ th(t("monitoring_user_last_player"), "last_player") }}
+            {{ th(t("monitoring_user_last_played"), "last_played") }}
+            {{ th(t("monitoring_user_play_count"), "plays") }}
+            {{ th(t("monitoring_user_watch_time"), "watch") }}
+          </tr>
+        </thead>
+
+        <tbody>
+          {% for r in ip_rows %}
+            <tr class="border-b border-slate-800">
+              <td class="py-3 pr-4 font-semibold">
+				<button
+				  type="button"
+				  class="js-ip-lookup text-left text-white hover:text-emerald-400 hover:underline transition-colors"
+				  data-ip="{{ r.ip }}"
+				>
+				  {{ r.ip }}
+				</button>
+              </td>
+              <td class="py-3 pr-4 text-slate-300">{{ r.last_seen|browser_datetime if r.last_seen else "—" }}</td>
+              <td class="py-3 pr-4 text-slate-300">{{ r.first_seen }}</td>
+              <td class="py-3 pr-4">{{ r.last_platform or "-" }}</td>
+              <td class="py-3 pr-4">{{ r.last_player or "-" }}</td>
+              <td class="py-3 pr-4">{{ r.last_played or "-" }}</td>
+              <td class="py-3 pr-4">{{ r.play_count or 0 }}</td>
+              <td class="py-3 pr-4">{{ r.watch_time or "-" }}</td>
+            </tr>
+          {% endfor %}
+          {% if ip_rows|length == 0 %}
+            <tr><td colspan="8" class="py-6 text-slate-500">{{ t("monitoring_user_no_ip_history") }}</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="ipLookupModal"
+       class="hidden fixed inset-0 z-50"
+       aria-hidden="true">
+    <div class="absolute inset-0 bg-black/70"></div>
+
+    <div class="vodum-modal-viewport relative mx-auto my-4 w-[95%] max-w-4xl">
+      <div class="vodum-modal-viewport bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+        <div class="shrink-0 flex items-start justify-between gap-4 px-5 py-4 border-b border-slate-800">
+          <div>
+            <div class="text-lg font-semibold text-white">{{ t("monitoring_user_ip_details") }}</div>
+            <div id="ipLookupModalSubtitle" class="text-sm text-slate-400 mt-1">—</div>
+          </div>
+          <button type="button"
+                  id="ipLookupModalClose"
+                  class="px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800">
+             {{ t("close") }}
+          </button>
+        </div>
+
+        <div class="vodum-modal-scroll flex-1 p-5 space-y-5">
+          <div id="ipLookupLoading" class="hidden">
+            <div class="flex items-center gap-3 text-slate-300">
+              <svg class="animate-spin h-5 w-5 text-emerald-400" viewBox="0 0 24 24" fill="none">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+              </svg>
+              <span>{{ t("monitoring_user_loading_ip") }}</span>
+            </div>
+          </div>
+
+          <div id="ipLookupError" class="hidden rounded-xl border border-rose-800 bg-rose-950/40 px-4 py-3 text-sm text-rose-300">
+            {{ t("monitoring_user_unable_ip") }}
+          </div>
+
+          <div id="ipLookupContent" class="hidden space-y-5">
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+              <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+                <div class="text-xs text-slate-400">IP</div>
+                <div id="ipLookupIp" class="mt-1 font-semibold break-all">—</div>
+              </div>
+
+              <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+                <div class="text-xs text-slate-400">{{ t("monitoring_user_location") }}</div>
+                <div id="ipLookupLocation" class="mt-1 font-semibold">—</div>
+              </div>
+
+              <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+                <div class="text-xs text-slate-400">{{ t("monitoring_user_isp") }}</div>
+                <div id="ipLookupIsp" class="mt-1 font-semibold break-words">—</div>
+              </div>
+
+              <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+                <div class="text-xs text-slate-400">{{ t("timezone") }}</div>
+                <div id="ipLookupTimezone" class="mt-1 font-semibold break-words">—</div>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap gap-2" id="ipLookupBadges"></div>
+
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+                <div class="text-sm font-semibold mb-3">{{ t("monitoring_user_network_details") }}</div>
+                <dl class="space-y-3 text-sm">
+                  <div class="flex items-start justify-between gap-4">
+                    <dt class="text-slate-400">{{ t("monitoring_user_organization") }}</dt>
+                    <dd id="ipLookupOrg" class="text-right text-slate-200 break-words">—</dd>
+                  </div>
+                  <div class="flex items-start justify-between gap-4">
+                    <dt class="text-slate-400">ASN</dt>
+                    <dd id="ipLookupAsn" class="text-right text-slate-200 break-words">—</dd>
+                  </div>
+                  <div class="flex items-start justify-between gap-4">
+                    <dt class="text-slate-400">{{ t("monitoring_user_coordinates") }}</dt>
+                    <dd id="ipLookupCoords" class="text-right text-slate-200 break-words">—</dd>
+                  </div>
+                </dl>
+              </div>
+
+              <div class="bg-slate-950 border border-slate-800 rounded-2xl p-2">
+                <div id="ipLookupMapWrap" class="hidden">
+                  <iframe
+                    id="ipLookupMap"
+                    title="{{ t('monitoring_user_map_title') }}"
+                    class="w-full h-[320px] rounded-xl border-0"
+                    loading="lazy"
+                    referrerpolicy="no-referrer-when-downgrade"
+                    src=""
+                  ></iframe>
+                </div>
+                <div id="ipLookupNoMap"
+                     class="h-[320px] flex items-center justify-center rounded-xl border border-dashed border-slate-800 text-sm text-slate-500">
+                  {{ t("monitoring_user_no_map") }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="application/json" id="monitoring-user-detail-config">
+    {
+      "unableIp": {{ t("monitoring_user_unable_ip")|tojson }},
+      "privateIp": {{ t("monitoring_user_private_ip")|tojson }},
+      "publicIp": {{ t("monitoring_user_public_ip")|tojson }},
+      "mobileNetwork": {{ t("monitoring_user_mobile_network")|tojson }},
+      "proxyVpn": {{ t("monitoring_user_proxy_vpn")|tojson }},
+      "hosting": {{ t("monitoring_user_hosting")|tojson }}
+    }
+  </script>
+  <script src="{{ url_for('static', filename='js/pages/monitoring-user-detail.js', v=g.app_version|default('dev')) }}"></script>
+
+{% endif %}
+
+</div>
+{% endblock %}

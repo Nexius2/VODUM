@@ -1,0 +1,473 @@
+from __future__ import annotations
+from core.error_reporting import log_handled_failure
+
+from core.jellyfin_auth import jellyfin_headers
+
+import json
+import requests
+import time
+from urllib.parse import quote
+from typing import Any, Dict, List, Optional
+
+from core.providers.base import BaseProvider
+from core.http_security import server_http_session
+from core.monitoring.library_media import jellyfin_library_section_id
+from logging_utils import get_logger
+
+
+log = get_logger("jellyfin")
+
+
+class JellyfinProvider(BaseProvider):
+    provider_name = "jellyfin"
+
+    def __init__(self, server, timeout: int = 15):
+        super().__init__(server, timeout=timeout)
+        self.http = server_http_session(server)
+
+    def _candidate_bases(self) -> List[str]:
+        # url > local_url > public_url
+        bases: List[str] = []
+
+        invalid_literals = {"none", "null", "undefined", ""}
+
+        for u in (
+            getattr(self.server, "url", None),
+            getattr(self.server, "local_url", None),
+            getattr(self.server, "public_url", None),
+        ):
+            if not u:
+                continue
+
+            b = str(u).strip().rstrip("/")
+            if b.lower() in invalid_literals:
+                continue
+
+            # refuse "192.168.1.50:8096" sans schéma
+            if not (b.startswith("http://") or b.startswith("https://")):
+                continue
+
+            if b not in bases:
+                bases.append(b)
+
+        return bases
+
+    def _build_api_url(self, base: str, path: str) -> str:
+        base = (base or "").rstrip("/")
+        path = "/" + (path or "").lstrip("/")
+        return f"{base}{path}"
+
+    def _post_json(self, path: str, payload: Optional[dict] = None) -> bool:
+        bases = self._candidate_bases()
+        if not bases:
+            raise RuntimeError("Jellyfin server URL missing")
+
+        token = getattr(self.server, "token", None)
+        if not token:
+            raise RuntimeError("Jellyfin API key missing (stored in servers.token)")
+
+        headers = {**jellyfin_headers(token), "Content-Type": "application/json"}
+
+        last_exc: Optional[Exception] = None
+        errors: List[str] = []
+
+        for base in bases:
+            url = self._build_api_url(base, path)
+            try:
+                r = self.http.post(url, headers=headers, json=(payload or {}), timeout=self.timeout, allow_redirects=False)
+                r.raise_for_status()
+                if not 200 <= r.status_code < 300:
+                    raise RuntimeError("Jellyfin command returned an unexpected HTTP status")
+                return True
+            except requests.exceptions.RequestException as e:
+                last_exc = e
+                code = getattr(getattr(e, "response", None), "status_code", None)
+                errors.append(f"{url} -> {code or type(e).__name__}")
+                continue
+
+        raise RuntimeError(f"Jellyfin POST failed. Attempts: {', '.join(errors)}") from last_exc
+
+    def refresh_library(self, section_id: str) -> bool:
+        # Jellyfin exposes a reliable server-wide library scan endpoint. Unlike
+        # Plex, it does not provide an equivalent per-virtual-folder scan call.
+        return self._post_json("/Library/Refresh", {})
+
+
+    def send_session_message(self, session_key: str, title: str, text: str, timeout_ms: int = 8000) -> bool:
+        session_id = str(session_key).split(":", 1)[0]  # sessionId uniquement
+        payload = {
+            "Header": title,
+            "Text": text,
+            "TimeoutMs": int(timeout_ms),
+        }
+        return self._post_json(f"/Sessions/{session_id}/Message", payload)
+
+
+    def terminate_session(self, session_key: str, reason: str = "") -> bool:
+        session_id, _, expected_item_id = str(session_key or "").strip().partition(":")
+        if not session_id:
+            raise ValueError("Jellyfin session identifier is required")
+
+        # Observe the target first: an obsolete collector row must not stop a
+        # different title now playing on the same client.
+        target = self._session_for_stop(session_id)
+        if target is None or not (target.get("NowPlayingItem") or {}).get("Id"):
+            return False
+        if expected_item_id and str(target["NowPlayingItem"]["Id"]) != expected_item_id:
+            return False
+
+        requested = self._post_json(f"/Sessions/{quote(session_id, safe='')}/Playing/Stop", {})
+        if not requested:
+            return False
+
+        # Une session Jellyfin peut rester connectée après l'arrêt. La coupure
+        # est confirmée lorsque cette session n'a plus de NowPlayingItem.
+        for attempt in range(11):
+            if attempt:
+                time.sleep(0.5)
+            current = self._session_for_stop(session_id)
+            if current is None or not (current.get("NowPlayingItem") or {}).get("Id"):
+                return True
+
+        log.warning(
+            "Jellyfin stop not confirmed; client control capabilities: remote=%s media=%s",
+            target.get("SupportsRemoteControl"), target.get("SupportsMediaControl"),
+        )
+        return False
+
+    def _session_for_stop(self, session_id: str) -> Optional[dict]:
+        sessions = self._get_json("/Sessions?EnableRemoteIP=true")
+        if not isinstance(sessions, list) or any(
+            not isinstance(item, dict) or not item.get("Id") for item in sessions
+        ):
+            raise RuntimeError("Jellyfin returned an invalid session list; stop cannot be verified")
+        for item in sessions:
+            if str(item["Id"]) == session_id:
+                playing = item.get("NowPlayingItem")
+                if playing is not None and (
+                    not isinstance(playing, dict) or (playing and not playing.get("Id"))
+                ):
+                    raise RuntimeError("Jellyfin returned invalid playback state; stop cannot be verified")
+                return item
+        return None
+
+
+
+    def _get_json(self, path: str) -> Any:
+        bases = self._candidate_bases()
+        if not bases:
+            raise RuntimeError("Jellyfin server URL missing")
+
+        token = getattr(self.server, "token", None)
+        if not token:
+            raise RuntimeError("Jellyfin API key missing (stored in servers.token)")
+
+        headers = jellyfin_headers(token)
+
+        last_exc: Optional[Exception] = None
+        auth_exc: Optional[Exception] = None
+        errors: List[str] = []
+
+        for base in bases:
+            url = self._build_api_url(base, path)
+            try:
+                r = self.http.get(url, headers=headers, timeout=self.request_timeout())
+                r.raise_for_status()
+                return r.json()
+            except requests.exceptions.RequestException as e:
+                last_exc = e
+                code = getattr(getattr(e, "response", None), "status_code", None)
+                if code in (401, 403):
+                    auth_exc = e
+                errors.append(f"{url} -> {code or type(e).__name__}")
+                continue
+
+        if auth_exc is not None:
+            raise RuntimeError(
+                "Jellyfin API authentication rejected; check the configured API key and permissions"
+            ) from auth_exc
+        raise RuntimeError(
+            f"Jellyfin API request failed via all URLs. Attempts: {', '.join(errors)}"
+        ) from last_exc
+
+    @staticmethod
+    def _ticks_to_ms(ticks: Any) -> Optional[int]:
+        # Jellyfin ticks = 10_000 ticks per ms
+        if isinstance(ticks, int):
+            return int(ticks / 10_000)
+        return None
+
+    @staticmethod
+    def _to_int(v: Any) -> Optional[int]:
+        """
+        Jellyfin peut renvoyer des nombres en int, float, ou string ("12345").
+        On convertit proprement vers int, sinon None.
+        """
+        if v is None:
+            return None
+        if isinstance(v, bool):
+            return int(v)
+        if isinstance(v, int):
+            return v
+        if isinstance(v, float):
+            return int(v)
+        if isinstance(v, str):
+            s = v.strip()
+            if not s:
+                return None
+            # accepte "12345" ou "12345.0"
+            try:
+                return int(float(s))
+            except Exception:
+                return None
+        return None
+
+
+    @staticmethod
+    def _pick_ip(session: Dict[str, Any]) -> Optional[str]:
+        """
+        Jellyfin can expose remote ip depending on config/version and reverse proxy.
+        Best-effort extraction.
+        """
+        ip = (
+            session.get("RemoteEndPoint")
+            or session.get("RemoteAddress")
+            or session.get("RemoteIp")
+        )
+
+        # Some setups may put it in AdditionalUsers / etc (rare) -> ignore.
+
+        # If behind reverse-proxy, RemoteEndPoint may be proxy IP.
+        # Sometimes Jellyfin includes request headers (not always). Best-effort:
+        if not ip:
+            headers = session.get("Headers") or session.get("RequestHeaders") or {}
+            if isinstance(headers, dict):
+                xff = headers.get("X-Forwarded-For") or headers.get("x-forwarded-for")
+                if isinstance(xff, str) and xff.strip():
+                    # Take first IP in XFF chain
+                    ip = xff.split(",")[0].strip()
+
+        if isinstance(ip, str):
+            ip = ip.strip()
+            if not ip:
+                return None
+
+            # Sometimes Jellyfin returns "IP:PORT"
+            # Example: "192.168.1.12:51234"
+            if ":" in ip and ip.count(":") == 1:
+                host, port = ip.split(":", 1)
+                if host.strip().replace(".", "").isdigit():
+                    ip = host.strip()
+            return ip
+        return None
+
+    def _get_item_details(self, item_id: str) -> Dict[str, Any]:
+        """
+        Fallback: /Sessions ne fournit pas toujours Name/Type dans NowPlayingItem
+        (souvent avec Jellyfin Web). On récupère donc l'item complet.
+        """
+        try:
+            # /Items/{id} retourne un objet avec Name + Type généralement fiables
+            return self._get_json(f"/Items/{item_id}") or {}
+        except Exception:
+            log_handled_failure("jellyfin.read_item")
+            return {}
+
+    def _get_item_ancestors(self, item_id: str) -> List[Dict[str, Any]]:
+        try:
+            data = self._get_json(f"/Items/{item_id}/Ancestors") or []
+            return data if isinstance(data, list) else []
+        except Exception:
+            log_handled_failure("jellyfin.read_ancestors")
+            return []
+
+
+
+    def get_active_sessions(self) -> List[Dict[str, Any]]:
+        # EnableRemoteIP increases chances of having RemoteEndPoint filled
+        data = self._get_json("/Sessions?EnableRemoteIP=true")
+        sessions: List[Dict[str, Any]] = []
+
+        for s in data or []:
+            session_id = s.get("Id")
+            user_id = s.get("UserId") or (s.get("User") or {}).get("Id")
+
+            # IMPORTANT:
+            # Jellyfin peut garder une "session" même après arrêt,
+            # mais avec NowPlayingItem absent (ou vide).
+            # Si on la garde, le collecteur ne verra jamais la session "disparaitre"
+            # => aucun event "stop" => aucune entrée en history.
+            now_playing = s.get("NowPlayingItem") or {}
+            item_id = now_playing.get("Id")
+            if not session_id or not item_id:
+                continue
+
+            play_key = f"{session_id}:{item_id}"
+            play_state = s.get("PlayState") or {}
+            jf_play_method = (play_state.get("PlayMethod") or "").strip()  # DirectPlay/DirectStream/Transcode
+
+            pm = jf_play_method.lower()
+            if pm == "transcode":
+                play_method = "transcode"
+                is_transcode = 1
+            elif pm == "directstream":
+                play_method = "directstream"
+                is_transcode = 0
+            elif pm == "directplay":
+                play_method = "directplay"
+                is_transcode = 0
+            else:
+                play_method = "unknown"
+                is_transcode = 0
+
+            transcoding_info = s.get("TranscodingInfo") or {}
+
+            # Bitrate Jellyfin : souvent str/float → on normalise
+            bitrate = self._to_int(transcoding_info.get("Bitrate"))
+
+            # fallback : certaines versions mettent Bitrate ailleurs
+            if bitrate is None:
+                bitrate = self._to_int((s.get("NowPlayingItem") or {}).get("Bitrate"))
+
+
+            is_paused = play_state.get("IsPaused")
+            state = "paused" if is_paused else "playing"
+
+            progress_ms = self._ticks_to_ms(play_state.get("PositionTicks"))
+            duration_ms = self._ticks_to_ms(now_playing.get("RunTimeTicks"))
+
+            # title/type peuvent être absents ou trop génériques ("Video") selon le client Jellyfin.
+            title = (
+                now_playing.get("Name")
+                or now_playing.get("OriginalTitle")
+                or now_playing.get("SortName")
+            )
+            jf_type = (now_playing.get("Type") or "").strip().lower()
+
+            # Infos épisode/série parfois déjà présentes dans /Sessions
+            grandparent_title = (
+                now_playing.get("SeriesName")
+                or now_playing.get("GrandparentTitle")
+                or None
+            )
+            parent_title = (
+                now_playing.get("SeasonName")
+                or now_playing.get("ParentTitle")
+                or None
+            )
+            season_number = now_playing.get("ParentIndexNumber")
+            episode_number = now_playing.get("IndexNumber")
+            
+            item = None
+
+            # ✅ Fallback: si /Sessions est incomplet OU trop générique ("Video"),
+            # récupérer l'item complet pour obtenir le vrai Type.
+            if not title or jf_type in ("", "unknown", "other", "video"):
+                item = self._get_item_details(str(item_id))
+                if item:
+                    title = (
+                        title
+                        or item.get("Name")
+                        or item.get("OriginalTitle")
+                        or item.get("SortName")
+                    )
+
+                    item_type = (item.get("Type") or "").strip().lower()
+                    if item_type:
+                        jf_type = item_type
+
+                    grandparent_title = (
+                        grandparent_title
+                        or item.get("SeriesName")
+                        or item.get("GrandparentTitle")
+                        or None
+                    )
+                    parent_title = (
+                        parent_title
+                        or item.get("SeasonName")
+                        or item.get("ParentTitle")
+                        or None
+                    )
+                    season_number = season_number or item.get("ParentIndexNumber")
+                    episode_number = episode_number or item.get("IndexNumber")
+
+                    for key in (
+                        "SeriesId", "SeriesName", "SeasonId", "SeasonName",
+                        "CollectionFolderId", "LibraryId", "TopParentId",
+                        "ImageTags", "BackdropImageTags",
+                    ):
+                        if not now_playing.get(key) and item.get(key) is not None:
+                            now_playing[key] = item.get(key)
+
+            library_section_id = jellyfin_library_section_id(now_playing, item or {}, [])
+            if not library_section_id:
+                library_section_id = jellyfin_library_section_id(
+                    now_playing,
+                    item or {},
+                    self._get_item_ancestors(str(item_id)),
+                )
+
+            # --- Normalize media type
+            # Important: chez Jellyfin, "video" peut être un film OU un épisode selon le client.
+            if jf_type == "episode":
+                media_category = "serie"
+            elif jf_type in ("movie",):
+                media_category = "movie"
+            elif jf_type in ("audio", "musictrack", "song"):
+                media_category = "music"
+            elif jf_type == "video":
+                media_category = "serie" if grandparent_title else "movie"
+            else:
+                media_category = "serie" if grandparent_title else "other"
+
+            client_name = s.get("Client") or s.get("DeviceName")
+            client_product = s.get("ApplicationName") or s.get("AppName") or None
+            app_version = s.get("ApplicationVersion") or None
+            if client_product and app_version:
+                client_product = f"{client_product} {app_version}".strip()
+            elif not client_product:
+                client_product = app_version
+
+            device = s.get("DeviceName") or s.get("DeviceId") or None
+            ip = self._pick_ip(s)
+
+            sessions.append(
+                {
+                    "provider": "jellyfin",
+                    "session_key": str(play_key),
+                    "external_user_id": str(user_id) if user_id else None,
+                    "username": s.get("UserName") or (s.get("User") or {}).get("Name"),
+                    "media_key": str(item_id),
+
+                    "media_type": media_category,
+
+                    "title": title,
+                    "grandparent_title": grandparent_title,
+                    "parent_title": parent_title,
+                    "season_number": int(season_number) if season_number is not None and str(season_number).isdigit() else None,
+                    "episode_number": int(episode_number) if episode_number is not None and str(episode_number).isdigit() else None,
+                    "library_section_id": library_section_id,
+                    "state": state,
+
+                    "progress_ms": progress_ms,
+                    "duration_ms": duration_ms,
+
+                    "play_method": play_method,
+                    "is_transcode": is_transcode,
+
+                    "video_decision": None,
+                    "audio_decision": None,
+
+                    "bitrate": bitrate,
+                    "video_codec": (transcoding_info.get("VideoCodec") or None),
+                    "audio_codec": (transcoding_info.get("AudioCodec") or None),
+
+                    "client_name": client_name,
+                    "client_product": client_product,
+                    "device": device,
+                    "ip": ip,
+                    "raw_json": json.dumps(s, ensure_ascii=False),
+                }
+            )
+
+        return sessions

@@ -1,0 +1,48 @@
+{
+  "language_name": "Français",
+  "common": {
+    "none": "Aucun"
+  },
+  "policy": {
+    "warn_title_expired": "Abonnement expiré",
+    "subscription_expired": "Votre abonnement est terminé. Merci de le renouveler pour restaurer l'accès.",
+    "max_streams_per_user": "Votre abonnement autorise {limit} lecture(s) simultanée(s). VODUM a détecté {value} lecture(s).",
+    "max_ips_per_user": "Trop d'adresses IP différentes utilisent votre compte.",
+    "max_streams_per_ip": "Trop de lectures simultanées utilisent la même adresse IP ({ip}).",
+    "max_streams_per_server": "La limite de lectures simultanées du serveur a été atteinte.",
+    "max_transcodes": "Trop de lectures transcodées sont actives.",
+    "max_bitrate": "Une lecture dépasse la limite de débit autorisée.",
+    "ban_4k_transcode": "Le transcodage 4K n'est pas autorisé.",
+    "unknown": "Une règle de lecture a été enfreinte : {rule_type}.",
+    "limit_label_max_ips_per_user": "Nombre maximum d'adresses IP par utilisateur",
+    "limit_label_max_streams_per_user": "Nombre maximum de lectures par utilisateur",
+    "limit_label_max_streams_per_ip": "Nombre maximum de lectures par adresse IP",
+    "limit_label_max_streams_per_server": "Nombre maximum de lectures par serveur",
+    "limit_label_max_transcodes": "Nombre maximum de lectures transcodées",
+    "limit_label_max_bitrate": "Débit maximum",
+    "limit_label_ban_4k_transcode": "Transcodage 4K bloqué",
+    "limit_label_unknown": "Limite de la règle"
+  },
+  "portal": {
+    "invitation": {"subject": "Votre invitation au portail {brand_name}", "body": "Bonjour {username},\n\nActivez votre compte avec ce lien a usage unique valable 7 jours :\n{url}"},
+    "password_reset": {"subject": "Reinitialisation de votre mot de passe {brand_name}", "body": "Utilisez ce lien a usage unique dans l'heure :\n{url}"},
+    "authentication_changed": {"subject": "Votre authentification {brand_name} a ete reinitialisee", "body": "Bonjour {username},\n\nUn administrateur a reinitialise vos methodes de connexion. Une nouvelle invitation est necessaire.\n\n{portal_login_url}"},
+    "suspended": {"subject": "Votre acces au portail {brand_name} a ete suspendu", "body": "Bonjour {username},\n\nVotre acces au portail a ete suspendu. Contactez le support si necessaire."},
+    "reactivated": {"subject": "Votre acces au portail {brand_name} a ete reactive", "body": "Bonjour {username},\n\nVotre acces au portail a ete reactive.\n\n{portal_login_url}"},
+    "new_login": {"subject": "Nouvelle connexion a votre portail {brand_name}", "body": "Bonjour {username},\n\nUne nouvelle connexion a votre compte a ete enregistree. Reinitialisez votre mot de passe si ce n'etait pas vous.\n\n{portal_login_url}"},
+    "direct_message": {"subject": "Nouveau message dans votre portail {brand_name}", "body": "Bonjour {username},\n\nVous avez recu un nouveau message d'un administrateur. Connectez-vous a votre portail pour le lire.\n\n{portal_login_url}"}
+  },
+  "activation": {"button": "Activer mon accès", "instructions": "Pour votre premier accès, commencez par le bouton ci-dessous. Sur Plex, créez votre compte ou connectez-vous avec l’adresse ayant reçu ce mail, puis revenez sur la page d’activation. Attendez que tous les serveurs soient prêts. Si une invitation reste en attente, acceptez-la dans Plex puis revenez vérifier vos accès. Le lien de connexion au portail sert aux visites suivantes."},
+  "default_templates": {
+    "copy_suffix": "Par défaut",
+    "stream_blocked": {"name": "Lecture bloquée", "subject": "Lecture bloquée", "body": "Bonjour {firstusername},\n\nVotre lecture a été arrêtée par {brand_name}.\n\n{policy_explanation}\n\nRègle : {policy_rule_type}\nLimite : {policy_limit} ({policy_limit_label})\nConstaté : {policy_observed}\n\nLecture arrêtée :\n{stream_killed}\n\nFlux actifs concernés ({active_streams_count}) :\n{active_streams}\n\nIP publiques détectées ({active_ips_count}) :\n{active_ips}\n\nAppareils détectés ({active_devices_count}) :\n{active_devices}\n\nHeure : {blocked_at}\n\nSi vous pensez qu'il s'agit d'une erreur, contactez l'administrateur.\n\nCordialement,\n{brand_name}\n"},
+    "default_expiration_date_change": {"name": "Changement de date d'expiration", "subject": "La date de votre abonnement a été modifiée", "body": "Bonjour {username},\n\nLa date d'expiration de votre abonnement a été modifiée.\n\nAncienne date d'expiration : {old_expiration_date}\nNouvelle date d'expiration : {new_expiration_date}\nVariation : {expiration_change_signed_days} jour(s)\nMotif : {expiration_change_reason}\n\nCordialement,\n{brand_name}\n"},
+    "default_fin": {"name": "Abonnement expiré", "subject": "Votre abonnement a expiré", "body": "Bonjour {username},\n\nVotre abonnement a expiré le {expiration_date}.\nVotre accès peut désormais être suspendu.\n\nSi vous souhaitez continuer à utiliser le service, merci de renouveler votre abonnement.\n\nCordialement,\n{brand_name}\n"},
+    "default_pending_invite_reminder": {"name": "Relance d'invitation en attente", "subject": "Rappel - merci d'accepter votre invitation", "body": "Bonjour {username},\n\nVotre invitation attend toujours d'être acceptée.\n\nPour commencer à utiliser votre compte :\n- Ouvrez Plex ou Jellyfin\n- Connectez-vous avec votre compte\n- Acceptez l'invitation de partage des bibliothèques si elle vous est proposée\n\nLa date d'expiration de votre abonnement est actuellement fixée au : {expiration_date}\n\nCordialement,\n{brand_name}\n"},
+    "default_preavis": {"name": "Préavis d'expiration", "subject": "Votre abonnement expire dans {days_left} jours", "body": "Bonjour {username},\n\nVotre abonnement expire dans {days_left} jours.\n\nDate d'expiration : {expiration_date}\n\nMerci de le renouveler pour éviter toute interruption de service.\n\nCordialement,\n{brand_name}\n"},
+    "default_parrainage": {"name": "Récompense de parrainage", "subject": "Récompense de parrainage accordée", "body": "Bonjour {username},\n\nBonne nouvelle : vous avez gagné {referral_reward_days} jour(s) bonus grâce à {referred_username}.\n\nAncienne date d'expiration : {referrer_old_expiration_date}\nNouvelle date d'expiration : {referrer_new_expiration_date}\n\nMerci pour votre parrainage.\n\nCordialement,\n{brand_name}\n"},
+    "default_relance": {"name": "Relance d'expiration", "subject": "Rappel - votre abonnement expire bientôt", "body": "Bonjour {username},\n\nPetit rappel : votre abonnement expire dans {days_left} jours.\n\nDate d'expiration : {expiration_date}\n\nMerci de le renouveler à temps pour éviter toute interruption de service.\n\nCordialement,\n{brand_name}\n"},
+    "default_user_creation": {"name": "Création d'utilisateur", "subject": "Bienvenue - votre compte est prêt", "body": "Bonjour {username},\n\nVotre compte {provider_name} a bien été créé.\n\nServeur : {server_name}\nAdresse : {server_url}\nIdentifiant : {login_username}\n\nJellyfin uniquement (non utilisé pour Plex) :\nNom d'utilisateur Jellyfin : {jellyfin_username}\nMot de passe Jellyfin : {jellyfin_password}\n\nTéléchargez le lecteur officiel :\n{player_download_url}\n\nAide à la configuration :\n{player_help_url}\n\nConnectez-vous et acceptez l'invitation de partage des bibliothèques si elle vous est proposée.\n\nDate d'expiration de l'abonnement : {expiration_date}\n\nCordialement,\n{brand_name}\n"},
+    "usage_risk_upgrade_suggestion": {"name": "Suggestion d'abonnement adapté", "subject": "Un abonnement plus adapté est peut-être disponible", "body": "Bonjour {username},\n\nNous avons remarqué que votre utilisation atteint régulièrement les limites de votre abonnement actuel.\n\nAbonnement actuel : {current_subscription}\nAbonnement suggéré : {suggested_subscription}\n\nCe n'est qu'une recommandation pour améliorer votre expérience et éviter les lectures bloquées.\n\nCordialement,\n{brand_name}\n"}
+  }
+}

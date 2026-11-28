@@ -1,0 +1,105 @@
+<div class="bg-slate-900 p-6 rounded-xl border border-slate-800">
+  <h2 class="text-lg font-semibold text-slate-200 mb-1">{{ t("system_settings") }}</h2>
+  <p class="text-sm text-slate-400 mb-6">{{ t("settings_section_system_desc") }}</p>
+
+  <div class="space-y-4">
+
+    <div class="rounded-lg border border-indigo-800/60 bg-indigo-950/20 p-3">
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <div class="text-sm text-slate-200">{{ t("installation_wizard") }}</div>
+          <div class="text-xs text-slate-400 mt-1">{{ t("installation_wizard_help") }}</div>
+        </div>
+        <button type="submit"
+                formaction="{{ url_for('setup_wizard_restart') }}"
+                formmethod="post"
+                class="px-3 py-2 rounded-lg bg-indigo-700 hover:bg-indigo-600 text-xs text-white">
+          {{ t("run_installation_wizard") }}
+        </button>
+      </div>
+    </div>
+
+
+    <div data-testid="encryption-key-status-card" class="rounded-lg border {% if encryption_key_status.ok %}border-emerald-800/60 bg-emerald-950/20{% else %}border-rose-800/60 bg-rose-950/20{% endif %} p-3">
+      <div class="flex items-center justify-between gap-3">
+        <span class="text-sm text-slate-200">{{ t("encryption_key_status") }}</span>
+        <span class="text-xs font-semibold {% if encryption_key_status.ok %}text-emerald-300{% else %}text-rose-300{% endif %}">
+          {{ t("valid") if encryption_key_status.ok else t("error") }}
+        </span>
+      </div>
+      <div class="text-xs text-slate-400 mt-1">{% if encryption_key_status.code %}{{ t("encryption_key_status_" ~ encryption_key_status.code) }}{% if encryption_key_status.detail %} ({{ encryption_key_status.detail }}){% endif %}{% else %}{{ encryption_key_status.message }}{% endif %}</div>
+      <div class="text-[11px] text-slate-500 mt-1">
+        {{ t("source") }}: {{ t("encryption_key_source_" ~ encryption_key_status.source) }}
+        {% if encryption_key_status.path %} · {{ encryption_key_status.path }}{% endif %}
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <input type="checkbox" name="enable_cron_jobs" value="1"
+             {% if settings.enable_cron_jobs %}checked{% endif %}
+             class="w-4 h-4 rounded border-slate-600 bg-slate-800">
+      <span class="text-sm text-slate-300">{{ t("enable_scheduled_tasks") }}</span>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <input type="checkbox" name="maintenance_mode" value="1"
+             {% if settings.maintenance_mode %}checked{% endif %}
+             class="w-4 h-4 rounded border-slate-600 bg-slate-800">
+      <span class="text-sm text-slate-300">{{ t("maintenance_mode") }}</span>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <input type="checkbox" name="debug_mode" value="1"
+             {% if settings.debug_mode %}checked{% endif %}
+             class="w-4 h-4 rounded border-slate-600 bg-slate-800">
+      <span class="text-sm text-slate-300">{{ t("debug_mode") }}</span>
+    </div>
+
+    <div class="border-t border-slate-800 pt-4 mt-4 space-y-3">
+      <h3 class="text-sm font-semibold text-slate-200">{{ t("logs") }}</h3>
+      <label for="log-retention-days" class="block text-sm text-slate-300">{{ t("log_retention_days") }}</label>
+      <select id="log-retention-days" name="log_retention_days" class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+        {% for days in [7, 14, 30, 90] %}
+        <option value="{{ days }}" {% if (settings.log_retention_days or 30) == days %}selected{% endif %}>{{ days }} {{ t("days") }}</option>
+        {% endfor %}
+      </select>
+      <p class="text-xs text-slate-400">{{ t("log_retention_help") }}</p>
+      <details>
+        <summary class="text-sm text-slate-300 cursor-pointer">{{ t("log_retention_advanced") }}</summary>
+        <label for="log-max-size" class="block text-sm text-slate-300 mt-3 mb-2">{{ t("log_max_size_mb") }}</label>
+        <input id="log-max-size" name="log_max_size_mb" type="number" min="5" max="1000" step="1" required value="{{ settings.log_max_size_mb or 50 }}" class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+      </details>
+    </div>
+
+    <!-- Plex User Import Mode -->
+    <div class="pt-4 mt-4 border-t border-slate-800">
+      <label class="block text-sm font-medium text-white mb-2">
+        {{ t("plex_user_import_mode") }}
+      </label>
+
+      <select
+        name="plex_user_import_mode"
+        class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+      >
+        <option
+          value="global"
+          {% if settings.plex_user_import_mode == 'global' %}selected{% endif %}
+        >
+          {{ t("plex_user_import_mode_global") }}
+        </option>
+
+        <option
+          value="shared_only"
+          {% if settings.plex_user_import_mode not in ['global'] %}selected{% endif %}
+        >
+          {{ t("plex_user_import_mode_shared_only") }}
+        </option>
+      </select>
+
+      <p class="text-xs text-slate-400 mt-2 leading-relaxed">
+        {{ t("plex_user_import_mode_help") }}
+      </p>
+    </div>
+
+  </div>
+</div>

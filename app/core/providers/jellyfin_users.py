@@ -1,0 +1,208 @@
+from core.jellyfin_auth import jellyfin_headers
+from typing import Any, Dict, List, Optional
+
+
+from logging_utils import get_logger
+from core.http_security import server_http_session
+
+log = get_logger("jellyfin_users")
+
+
+def _pick_base_url(server_row: Dict[str, Any]) -> str:
+    """Prefer public_url, else url, else local_url."""
+    base = (
+        (server_row.get("public_url") or "")
+        or (server_row.get("url") or "")
+        or (server_row.get("local_url") or "")
+    ).strip().rstrip("/")
+    if not base:
+        raise RuntimeError("Jellyfin: missing server URL (public_url/url/local_url)")
+    return base
+
+
+def _api_key(server_row: Dict[str, Any]) -> str:
+    token = (server_row.get("token") or "").strip()
+    if not token:
+        raise RuntimeError("Jellyfin: missing token (servers.token)")
+    return token
+
+
+def _headers(api_key: Optional[str] = None) -> Dict[str, str]:
+
+    headers = {**jellyfin_headers(api_key), "Content-Type": "application/json"}
+
+    return headers
+
+
+def jellyfin_list_users(server_row: Dict[str, Any]) -> List[Dict[str, Any]]:
+    base = _pick_base_url(server_row)
+    api_key = _api_key(server_row)
+    r = server_http_session(server_row).get(
+        f"{base}/Users", headers=_headers(api_key), timeout=20
+    )
+    r.raise_for_status()
+    data = r.json()
+    return data if isinstance(data, list) else []
+
+
+def jellyfin_create_user(
+    server_row: Dict[str, Any],
+    username: str,
+) -> Dict[str, Any]:
+    """Create a local Jellyfin user and return the created user object."""
+    if not username or not str(username).strip():
+        raise ValueError("Jellyfin: username is required")
+
+    base = _pick_base_url(server_row)
+    api_key = _api_key(server_row)
+
+    payload = {"Name": username.strip()}
+    r = server_http_session(server_row).post(
+        f"{base}/Users/New",
+        json=payload,
+        headers=_headers(api_key),
+        timeout=20,
+    )
+
+    if r.status_code >= 400:
+        try:
+            err = r.json()
+        except Exception:
+            err = r.text
+        raise RuntimeError(f"Jellyfin: create user failed ({r.status_code}) {err}")
+
+    user = r.json() if r.content else {}
+    if not isinstance(user, dict) or not user.get("Id"):
+        for u in jellyfin_list_users(server_row):
+            if (u.get("Name") or "").strip().lower() == username.strip().lower():
+                return u
+        raise RuntimeError("Jellyfin: create user did not return an Id")
+
+    return user
+
+
+def jellyfin_update_username(server_row: Dict[str, Any], jellyfin_user_id: str, username: str) -> bool:
+    normalized = str(username or "").strip()
+    if not normalized or len(normalized) > 100:
+        raise ValueError("Jellyfin: invalid username")
+    base = _pick_base_url(server_row); api_key = _api_key(server_row)
+    http = server_http_session(server_row)
+    response = http.get(f"{base}/Users/{jellyfin_user_id}", headers=_headers(api_key), timeout=20)
+    response.raise_for_status(); user = response.json() if response.content else {}
+    if str(user.get("Name") or "").strip() == normalized:
+        return False
+    user["Name"] = normalized
+    updated = http.post(f"{base}/Users/{jellyfin_user_id}", json=user, headers=_headers(api_key), timeout=20)
+    if updated.status_code in (405, 415):
+        updated = http.put(f"{base}/Users/{jellyfin_user_id}", json=user, headers=_headers(api_key), timeout=20)
+    updated.raise_for_status(); return True
+
+
+def jellyfin_set_password(
+    server_row: Dict[str, Any],
+    jellyfin_user_id: str,
+    password: str,
+) -> None:
+    """Set the password for a Jellyfin user."""
+    if not password:
+        return
+
+    base = _pick_base_url(server_row)
+    api_key = _api_key(server_row)
+
+    payload = {
+        "CurrentPassword": "",
+        # Jellyfin's UpdateUserPassword DTO calls this field NewPw.
+        # NewPassword is silently ignored by current Jellyfin releases.
+        "NewPw": password,
+        # True selects ResetPassword instead of ChangePassword and ignores NewPw.
+        "ResetPassword": False,
+    }
+
+    r = server_http_session(server_row).post(
+        f"{base}/Users/{jellyfin_user_id}/Password",
+        json=payload,
+        headers=_headers(api_key),
+        timeout=20,
+    )
+
+    if r.status_code >= 400:
+        log.error(
+            f"[JELLYFIN PASSWORD ERROR] "
+            f"status={r.status_code} "
+            f"url={r.url} "
+            f"response={r.text}"
+        )
+
+        raise RuntimeError(
+            f"Jellyfin: set password failed ({r.status_code}) {r.text}"
+        )
+
+
+def jellyfin_set_policy_folders(
+    server_row: Dict[str, Any],
+    jellyfin_user_id: str,
+    enabled_folders: List[str],
+) -> None:
+    """Apply a minimal policy: restrict EnabledFolders."""
+    base = _pick_base_url(server_row)
+    api_key = _api_key(server_row)
+
+    http = server_http_session(server_row)
+    r = http.get(
+        f"{base}/Users/{jellyfin_user_id}",
+        headers=_headers(api_key),
+        timeout=20,
+    )
+    r.raise_for_status()
+    user_obj = r.json() if r.content else {}
+    policy = user_obj.get("Policy") or {}
+    if not isinstance(policy, dict):
+        policy = {}
+
+    policy["EnableAllFolders"] = False
+    policy["EnabledFolders"] = [str(x) for x in (enabled_folders or [])]
+
+    url = f"{base}/Users/{jellyfin_user_id}/Policy"
+    r2 = http.post(
+        url,
+        json=policy,
+        headers=_headers(api_key),
+        timeout=20,
+    )
+    if r2.status_code in (405, 415):
+        r2 = http.put(
+            url,
+            json=policy,
+            headers=_headers(api_key),
+            timeout=20,
+        )
+    r2.raise_for_status()
+
+
+def jellyfin_apply_enabled_folders(
+    http,
+    base_url: str,
+    api_key: str,
+    jellyfin_user_id: str,
+    enabled_folders: List[str],
+) -> None:
+    """Apply folder restrictions using an already configured HTTP context."""
+    response = http.get(
+        f"{base_url}/Users/{jellyfin_user_id}",
+        headers=_headers(api_key),
+        timeout=20,
+    )
+    response.raise_for_status()
+    user_obj = response.json() if response.content else {}
+    policy = user_obj.get("Policy") or {}
+    if not isinstance(policy, dict):
+        policy = {}
+
+    policy["EnableAllFolders"] = False
+    policy["EnabledFolders"] = [str(value) for value in (enabled_folders or [])]
+    url = f"{base_url}/Users/{jellyfin_user_id}/Policy"
+    updated = http.post(url, json=policy, headers=_headers(api_key), timeout=20)
+    if updated.status_code in (405, 415):
+        updated = http.put(url, json=policy, headers=_headers(api_key), timeout=20)
+    updated.raise_for_status()

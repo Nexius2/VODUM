@@ -1,0 +1,48 @@
+{
+  "language_name": "Español",
+  "common": {
+    "none": "Ninguno"
+  },
+  "policy": {
+    "warn_title_expired": "Suscripción vencida",
+    "subscription_expired": "Tu suscripción ha terminado. Renuévala para restaurar el acceso.",
+    "max_streams_per_user": "Tu suscripción permite {limit} reproducción(es) simultánea(s). VODUM detectó {value} reproducción(es).",
+    "max_ips_per_user": "Demasiadas direcciones IP diferentes están usando tu cuenta.",
+    "max_streams_per_ip": "Demasiadas reproducciones simultáneas usan la misma dirección IP ({ip}).",
+    "max_streams_per_server": "Se ha alcanzado el límite de reproducciones del servidor.",
+    "max_transcodes": "Hay demasiadas reproducciones transcodificadas activas.",
+    "max_bitrate": "Una reproducción supera el límite de bitrate permitido.",
+    "ban_4k_transcode": "La transcodificación 4K no está permitida.",
+    "unknown": "Se infringió una política de reproducción: {rule_type}.",
+    "limit_label_max_ips_per_user": "Máximo de direcciones IP por usuario",
+    "limit_label_max_streams_per_user": "Máximo de reproducciones por usuario",
+    "limit_label_max_streams_per_ip": "Máximo de reproducciones por dirección IP",
+    "limit_label_max_streams_per_server": "Máximo de reproducciones por servidor",
+    "limit_label_max_transcodes": "Máximo de reproducciones transcodificadas",
+    "limit_label_max_bitrate": "Bitrate máximo",
+    "limit_label_ban_4k_transcode": "Transcodificación 4K bloqueada",
+    "limit_label_unknown": "Límite de la política"
+  },
+  "portal": {
+    "invitation": {"subject": "Invitacion a tu portal {brand_name}", "body": "Hola {username},\n\nActiva tu cuenta con este enlace de un solo uso, valido durante 7 dias:\n{url}"},
+    "password_reset": {"subject": "Restablece tu contrasena de {brand_name}", "body": "Utiliza este enlace de un solo uso durante la proxima hora:\n{url}"},
+    "authentication_changed": {"subject": "Tu autenticacion de {brand_name} fue restablecida", "body": "Hola {username},\n\nUn administrador restablecio tus metodos de acceso. Se requiere una nueva invitacion.\n\n{portal_login_url}"},
+    "suspended": {"subject": "Tu acceso al portal {brand_name} fue suspendido", "body": "Hola {username},\n\nTu acceso al portal fue suspendido. Contacta con soporte si es necesario."},
+    "reactivated": {"subject": "Tu acceso al portal {brand_name} fue reactivado", "body": "Hola {username},\n\nTu acceso al portal fue reactivado.\n\n{portal_login_url}"},
+    "new_login": {"subject": "Nuevo acceso a tu portal {brand_name}", "body": "Hola {username},\n\nSe registro un nuevo acceso a tu cuenta. Restablece tu contrasena si no fuiste tu.\n\n{portal_login_url}"},
+    "direct_message": {"subject": "Nuevo mensaje en tu portal {brand_name}", "body": "Hola {username},\n\nHas recibido un nuevo mensaje de un administrador. Inicia sesion en tu portal para leerlo.\n\n{portal_login_url}"}
+  },
+  "activation": {"button": "Activar mi acceso", "instructions": "Para tu primer acceso, empieza por el botón de abajo. En Plex, crea una cuenta o inicia sesión con la dirección que recibió este correo y vuelve a la página de activación. Espera a que todos los servidores estén listos. Si queda una invitación pendiente, acéptala en Plex y vuelve a comprobar el acceso. El enlace de inicio de sesión del portal es para visitas posteriores."},
+  "default_templates": {
+    "copy_suffix": "Predeterminada",
+    "stream_blocked": {"name": "Reproducción bloqueada", "subject": "Reproducción bloqueada", "body": "Hola {firstusername}:\n\n{brand_name} ha detenido tu reproducción.\n\n{policy_explanation}\n\nRegla: {policy_rule_type}\nLímite: {policy_limit} ({policy_limit_label})\nDetectado: {policy_observed}\n\nReproducción detenida:\n{stream_killed}\n\nStreams activos implicados ({active_streams_count}):\n{active_streams}\n\nIP públicas detectadas ({active_ips_count}):\n{active_ips}\n\nDispositivos detectados ({active_devices_count}):\n{active_devices}\n\nHora: {blocked_at}\n\nSi crees que se trata de un error, ponte en contacto con el administrador.\n\nSaludos cordiales,\n{brand_name}\n"},
+    "default_expiration_date_change": {"name": "Cambio de fecha de vencimiento", "subject": "La fecha de tu suscripción ha cambiado", "body": "Hola {username}:\n\nLa fecha de vencimiento de tu suscripción ha cambiado.\n\nFecha de vencimiento anterior: {old_expiration_date}\nNueva fecha de vencimiento: {new_expiration_date}\nCambio: {expiration_change_signed_days} día(s)\nMotivo: {expiration_change_reason}\n\nSaludos cordiales,\n{brand_name}\n"},
+    "default_fin": {"name": "Suscripción vencida", "subject": "Tu suscripción ha vencido", "body": "Hola {username}:\n\nTu suscripción venció el {expiration_date}.\nTu acceso puede quedar suspendido a partir de ahora.\n\nSi deseas seguir usando el servicio, renueva tu suscripción.\n\nSaludos cordiales,\n{brand_name}\n"},
+    "default_pending_invite_reminder": {"name": "Recordatorio de invitación pendiente", "subject": "Recordatorio - acepta tu invitación", "body": "Hola {username}:\n\nTu invitación sigue pendiente de aceptación.\n\nPara empezar a usar tu cuenta:\n- Abre Plex o Jellyfin\n- Inicia sesión con tu cuenta\n- Acepta la invitación para compartir bibliotecas si se te solicita\n\nLa fecha de vencimiento de tu suscripción es actualmente: {expiration_date}\n\nSaludos cordiales,\n{brand_name}\n"},
+    "default_preavis": {"name": "Aviso de vencimiento", "subject": "Tu suscripción vence en {days_left} días", "body": "Hola {username}:\n\nTu suscripción vence en {days_left} días.\n\nFecha de vencimiento: {expiration_date}\n\nRenuévala para evitar cualquier interrupción del servicio.\n\nSaludos cordiales,\n{brand_name}\n"},
+    "default_parrainage": {"name": "Recompensa por recomendación", "subject": "Recompensa por recomendación concedida", "body": "Hola {username}:\n\nBuenas noticias: has ganado {referral_reward_days} día(s) extra gracias a {referred_username}.\n\nFecha de vencimiento anterior: {referrer_old_expiration_date}\nNueva fecha de vencimiento: {referrer_new_expiration_date}\n\nGracias por tu recomendación.\n\nSaludos cordiales,\n{brand_name}\n"},
+    "default_relance": {"name": "Recordatorio de vencimiento", "subject": "Recordatorio - tu suscripción vence pronto", "body": "Hola {username}:\n\nTe recordamos que tu suscripción vence en {days_left} días.\n\nFecha de vencimiento: {expiration_date}\n\nRenuévala a tiempo para evitar cualquier interrupción del servicio.\n\nSaludos cordiales,\n{brand_name}\n"},
+    "default_user_creation": {"name": "Creación de usuario", "subject": "Bienvenido - tu cuenta está lista", "body": "Hola {username}:\n\nTu cuenta de {provider_name} se ha creado correctamente.\n\nServidor: {server_name}\nDirección: {server_url}\nUsuario: {login_username}\n\nSolo Jellyfin (no se usa en Plex):\nUsuario de Jellyfin: {jellyfin_username}\nContraseña de Jellyfin: {jellyfin_password}\n\nDescarga el reproductor oficial:\n{player_download_url}\n\nAyuda para la configuración:\n{player_help_url}\n\nInicia sesión y acepta la invitación para compartir bibliotecas si se te solicita.\n\nFecha de vencimiento de la suscripción: {expiration_date}\n\nSaludos cordiales,\n{brand_name}\n"},
+    "usage_risk_upgrade_suggestion": {"name": "Sugerencia de suscripción más adecuada", "subject": "Puede haber una suscripción más adecuada para ti", "body": "Hola {username}:\n\nHemos notado que tu uso alcanza con frecuencia los límites de tu suscripción actual.\n\nSuscripción actual: {current_subscription}\nSuscripción sugerida: {suggested_subscription}\n\nEs solo una recomendación para mejorar tu experiencia y evitar reproducciones bloqueadas.\n\nSaludos cordiales,\n{brand_name}\n"}
+  }
+}

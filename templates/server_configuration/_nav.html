@@ -1,0 +1,27 @@
+{# Compliance tabs and the operating mode badge, shown on every page of the section. #}
+<div class="flex flex-wrap items-center justify-between gap-3">
+  <nav class="config-tabs admin-tab-strip flex flex-wrap gap-2" aria-label="{{ t('server_config_title') }}">
+    {% for tab, endpoint, label in [("compliance", "server_configuration_compliance", "config_tab_overview"), ("settings", "server_configuration_settings_view", "config_tab_settings"), ("profiles", "server_configuration_profiles", "config_tab_profiles"), ("groups", "server_configuration_groups", "config_tab_groups"), ("deploy", "server_configuration_deploy", "config_tab_history")] %}
+    <a href="{{ url_for(endpoint) }}"
+       class="px-4 py-2 rounded-lg text-sm {% if config_tab == tab %}bg-slate-800 text-primary{% else %}text-slate-300 hover:bg-slate-800{% endif %}"
+       {% if config_tab == tab %}aria-current="page"{% endif %}>{{ t(label) }}</a>
+    {% endfor %}
+  </nav>
+  {% set current_mode = compliance_mode|default(mode|default("monitoring")) %}
+  {% set next_mode = "monitoring" if current_mode == "manual" else "manual" %}
+  <form method="POST" action="{{ url_for('server_configuration_mode') }}" data-config-mode-badge
+        data-confirm="{{ t('config_mode_' ~ next_mode ~ '_switch_confirm') }}"
+        data-confirm-title="{{ t('config_mode_' ~ next_mode) }}" data-confirm-label="{{ t('config_mode_switch') }}"
+        {% if next_mode == "monitoring" %}data-confirm-danger="0"{% endif %}>
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="mode" value="{{ next_mode }}">
+    <input type="hidden" name="next" value="{{ request.full_path if request else '' }}">
+    <button type="submit" title="{{ t('config_mode_badge_help') }}"
+            class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs
+                   {% if current_mode == 'manual' %}border-amber-700/60 bg-amber-950/30 text-amber-200{% else %}border-slate-700 bg-slate-900 text-slate-300{% endif %} hover:bg-slate-800">
+      <span class="config-mode-dot {% if current_mode == 'manual' %}is-manual{% endif %}" aria-hidden="true"></span>
+      {{ t("config_mode_" ~ current_mode) }}
+      <span class="text-slate-500">· {{ t("config_mode_switch") }}</span>
+    </button>
+  </form>
+</div>

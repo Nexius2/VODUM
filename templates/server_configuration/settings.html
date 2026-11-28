@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+{% set active_page = "server_configuration" %}
+
+{% macro show(value) -%}
+{%- if value is none -%}—{%- elif value == "true" -%}{{ t("yes") }}{%- elif value == "false" -%}{{ t("no") }}{%- elif value == "" -%}∅{%- else -%}{{ value }}{%- endif -%}
+{%- endmacro %}
+
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/server-configuration.css', v=g.app_version|default('dev')) }}">{% endblock %}
+{% block header_title %}{{ t("server_config_title") }}{% endblock %}
+{% block header_subtitle %}{{ t("config_settings_subtitle") }}{% endblock %}
+
+{% block content %}
+{% set single = scope.servers|length == 1 %}
+<div class="space-y-6" data-config-settings
+     data-detail-url="{{ url_for('server_configuration_settings_detail') }}" data-scope-query="{{ scope_query }}"
+     data-back="{{ request.full_path }}">
+  {% include "server_configuration/_nav.html" %}
+
+  {% if not scope.available %}
+  <section class="bg-slate-900 p-6 rounded-xl border border-slate-800 text-sm text-slate-400">{{ t("server_config_empty_title") }}</section>
+  {% else %}
+  <form method="GET" action="{{ url_for('server_configuration_settings_view') }}" data-settings-scope
+        class="bg-slate-900 p-4 rounded-xl border border-slate-800 flex flex-wrap items-end gap-4">
+    {% if scope.available|length > 1 %}
+    <fieldset>
+      <legend class="block text-xs mb-1 text-slate-400">{{ t("config_overview_platform") }}</legend>
+      <div class="inline-flex rounded-lg border border-slate-700 overflow-hidden">
+        {% for provider in scope.available %}
+        <a href="{{ url_for('server_configuration_settings_view', provider=provider) }}"
+           class="px-4 py-2 text-sm {% if provider == scope.provider %}bg-slate-800 text-primary{% else %}text-slate-300 hover:bg-slate-800{% endif %}"
+           {% if provider == scope.provider %}aria-current="true"{% endif %}>{{ "Plex" if provider == "plex" else "Jellyfin" }} · {{ scope.counts[provider] }}</a>
+        {% endfor %}
+      </div>
+    </fieldset>
+    {% endif %}
+    <input type="hidden" name="provider" value="{{ scope.provider }}">
+    <div>
+      <label for="settings-scope" class="block text-xs mb-1 text-slate-400">{{ t("config_settings_scope") }}</label>
+      <select id="settings-scope" name="group" data-scope-select class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+        <option value="" {% if scope.kind == "all" %}selected{% endif %}>{{ t("config_settings_scope_all").format(count=scope.platform|length) }}</option>
+        {% for group in scope.groups %}<option value="{{ group.id }}" {% if scope.group and scope.group.id == group.id %}selected{% endif %}>{{ t("config_settings_scope_group").format(name=group.name) }}</option>{% endfor %}
+        <option value="pick" {% if scope.kind == "servers" %}selected{% endif %}>{{ t("config_settings_scope_pick") }}</option>
+      </select>
+    </div>
+    <details class="config-picker" data-server-picker>
+      <summary class="px-3 py-2 rounded-lg border border-slate-700 bg-slate-800 text-sm text-slate-200 cursor-pointer">
+        {% if scope.servers|length == 1 and scope.platform|length > 1 %}{{ scope.servers[0].name }}{% else %}{{ t("config_settings_servers_chosen").format(count=scope.servers|length, total=scope.platform|length) }}{% endif %}</summary>
+      <div class="config-picker-panel bg-slate-950 border border-slate-700 rounded-xl p-3 space-y-2">
+        <input type="search" data-picker-search placeholder="{{ t('config_overview_search') }}" autocomplete="off"
+               class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm" aria-label="{{ t('config_overview_search') }}">
+        <div class="flex gap-2 text-xs">
+          <button type="button" data-picker-all class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200">{{ t("config_settings_pick_all") }}</button>
+          <button type="button" data-picker-none class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200">{{ t("config_settings_pick_none") }}</button>
+        </div>
+        <ul class="config-picker-list space-y-1">
+          {% set chosen_ids = scope.servers|map(attribute='id')|list %}
+          {% for server in scope.platform %}
+          <li data-picker-item data-name="{{ server.name|lower }}">
+            <label class="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-800 text-sm text-slate-200 cursor-pointer">
+              <input type="checkbox" name="servers" value="{{ server.id }}" class="w-4 h-4 rounded border-slate-600 bg-slate-800"
+                     {% if scope.kind == "servers" and server.id in chosen_ids %}checked{% endif %}>
+              {{ server.name }}
+            </label>
+          </li>
+          {% endfor %}
+        </ul>
+        <button type="submit" class="w-full px-3 py-2 rounded-lg bg-primary hover:bg-primary-dark text-sm text-white">{{ t("config_settings_pick_apply") }}</button>
+      </div>
+    </details>
+    {% if view %}
+    <div class="ml-auto text-xs text-slate-400 flex flex-wrap items-center gap-3" data-settings-freshness>
+      <span>{% if view.oldest_read %}{{ t("config_settings_read_at") }} {{ view.oldest_read|browser_datetime }}{% else %}{{ t("config_settings_never_read") }}{% endif %}</span>
+      <button type="button" data-config-refresh
+              data-ids="{{ scope.servers|map(attribute='id')|list|tojson|forceescape }}"
+              data-missing="{{ view.missing_ids|tojson|forceescape }}"
+              data-url="{{ url_for('server_configuration_snapshot_refresh', server_id=0) }}"
+              data-progress-label="{{ t('config_settings_reading') }}"
+              class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200">{{ t("config_settings_refresh") }}</button>
+      <span data-progress-text aria-live="polite"></span>
+    </div>
+    {% endif %}
+  </form>
+
+  {% if view %}
+  {% set unreadable = view.servers|selectattr('error')|list %}
+  {% if unreadable %}
+  <div class="rounded-lg border border-amber-800/60 bg-amber-950/20 p-3 text-sm text-amber-200" data-settings-unreadable>
+    {{ t("config_settings_unreadable").format(count=unreadable|length) }}
+    <span class="text-amber-300">{% for server in unreadable[:5] %}{{ server.name }} ({{ t(server.error) }}){% if not loop.last %}, {% endif %}{% endfor %}{% if unreadable|length > 5 %}…{% endif %}</span>
+  </div>
+  {% endif %}
+
+  <section class="bg-slate-900 rounded-xl border border-slate-800" data-settings-list>
+    <div class="config-filter-bar p-4 flex flex-wrap items-end gap-3 border-b border-slate-800">
+      <div class="flex-1 min-w-[12rem]">
+        <label for="settings-search" class="block text-xs mb-1 text-slate-400">{{ t("server_config_search") }}</label>
+        <input id="settings-search" type="search" data-settings-search autocomplete="off"
+               class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+      </div>
+      <div>
+        <label for="settings-category" class="block text-xs mb-1 text-slate-400">{{ t("server_config_category") }}</label>
+        <select id="settings-category" data-settings-category class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+          <option value="">{{ t("server_config_all_categories") }}</option>
+          {% for category in view.categories %}<option value="{{ category }}">{{ t("server_config_cat_" ~ category) }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    {% set show_items = ["everything", "different"] + (["off_profile"] if view.profiled else []) + ["off_recommendation", "recommended"] %}
+    {% set show_current = show_filter if show_filter in show_items else "different" %}
+    <div class="px-4 py-3 flex flex-wrap items-center gap-4 border-b border-slate-800">
+      {% if not single %}
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="text-xs text-slate-400" id="settings-show-label">{{ t("config_settings_show") }}</span>
+        <div class="config-segmented" role="radiogroup" aria-labelledby="settings-show-label">
+          {% for item in show_items %}
+          <button type="button" role="radio" data-settings-show="{{ item }}" aria-checked="{{ 'true' if item == show_current else 'false' }}"
+                  title="{{ t('config_settings_show_' ~ item ~ '_help') }}"
+                  class="config-segment px-3 py-1.5 text-sm text-slate-300">{{ t("config_settings_show_" ~ item) }}
+            <span class="config-segment-count" data-show-count="{{ item }}"></span></button>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+      <div class="flex flex-wrap items-center gap-4 text-sm text-slate-300">
+        {% if view.rows|selectattr("library")|list %}
+        <label class="inline-flex items-center gap-2 cursor-pointer" title="{{ t('config_settings_show_libraries_help') }}">
+          <input type="checkbox" data-settings-libraries checked class="rounded border-slate-600 bg-slate-800">
+          {{ t("config_settings_include_libraries") }}</label>
+        {% endif %}
+        <label class="inline-flex items-center gap-2 cursor-pointer" title="{{ t('config_settings_include_advanced_help') }}">
+          <input type="checkbox" data-settings-advanced class="rounded border-slate-600 bg-slate-800">
+          {{ t("config_settings_include_advanced") }}</label>
+      </div>
+    </div>
+    <div class="px-4 py-2 text-xs text-slate-400 border-b border-slate-800" data-settings-summary>
+      {{ t("config_settings_summary").format(settings=view.summary.settings, servers=view.readable) }}
+    </div>
+
+    <div class="config-setting-row config-setting-head px-4 py-2 border-b border-slate-800 text-[11px] uppercase tracking-wide text-slate-500" aria-hidden="true">
+      <span>{{ t("config_settings_col_setting") }}</span>
+      <span>{{ t("config_settings_col_values") }}</span>
+      <span>{{ t("config_settings_col_reference") }}</span>
+      <span class="text-right">{{ t("config_settings_col_gaps") }}</span>
+      <span></span>
+    </div>
+    <ul class="divide-y divide-slate-800" data-settings-rows>
+      {% for row in view.rows %}
+      <li data-settings-row data-key="{{ row.key }}" data-state="{{ row.state }}" data-category="{{ row.category }}"
+          data-advanced="{{ 1 if row.advanced else 0 }}" data-library="{{ 1 if row.library else 0 }}" data-off-profile="{{ row.off_profile }}"
+          data-off-recommendation="{{ row.off_recommendation }}"
+          data-recommended="{{ 1 if row.recommended and row.recommended.kind == 'recommended' else 0 }}"
+          data-search="{{ (row.label ~ ' ' ~ row.key ~ ' ' ~ (row.library or ''))|lower }}">
+        <button type="button" data-settings-open class="config-setting-row w-full text-left px-4 py-3 grid gap-3 hover:bg-slate-800/60">
+          <span class="config-setting-name">
+            <span class="block text-slate-200">{% if row.library %}<span class="text-slate-400">{{ row.library }} · </span>{% endif %}{{ row.label }}</span>
+            <span class="block text-[11px] text-slate-500">{{ t("server_config_cat_" ~ row.category) }}
+              {%- if row.state == "library" %} · <span class="italic">{{ t("config_matrix_library_missing") }}</span>
+              {%- elif row.merged %} · <span class="italic">{{ t("config_matrix_merged") }}</span>
+              {%- elif row.state == "specific" %} · <span class="italic">{{ t("config_matrix_machine_specific") }}</span>{% endif %}</span>
+          </span>
+          <span class="config-setting-values flex flex-wrap items-center gap-1.5">
+            {% for group in row.chips %}
+            <span class="config-chip {% if row.state == 'different' and not single %}is-different{% elif row.state in ('specific', 'library') %}is-neutral{% endif %}{% if group.value is none %} is-missing{% endif %}"
+                  {% if group.value is none %}title="{{ t('config_settings_absent_library_help') if row.library else t('config_settings_absent_help') }}"{% endif %}>
+              <span class="config-chip-value">{{ show(group.display) if group.value is not none else t("config_settings_absent") }}</span>
+              {% if group.servers|length > 1 %}<span class="config-chip-count">{{ t("config_settings_chip_servers").format(count=group.servers|length) }}</span>{% endif %}
+            </span>
+            {% endfor %}
+            {% if row.more %}<span class="text-xs text-slate-400">{{ t("config_settings_more_values").format(count=row.more) }}</span>{% endif %}
+          </span>
+          <span class="config-setting-reco text-xs">
+            {% if row.recommended and row.recommended.kind == "recommended" %}
+            <span class="text-slate-500">{{ t("config_matrix_recommended") }}</span> <span class="text-emerald-300">{{ show(row.recommended.display) }}</span>
+            {% elif row.recommended %}
+            <span class="text-slate-500">{{ t("config_matrix_default") }} {{ show(row.recommended.display) }}</span>
+            {% endif %}
+            {% if row.expected_display is not none %}
+            <span class="block text-slate-500">{{ t("config_matrix_expected") }} <span class="text-slate-300">{{ show(row.expected_display) }}</span></span>
+            {% endif %}
+          </span>
+          <span class="config-setting-flags flex flex-wrap justify-end gap-1.5 text-xs">
+            {% if row.off_profile %}<span class="px-2 py-0.5 rounded-full bg-rose-900/40 text-rose-300 whitespace-nowrap">{{ t("config_settings_flag_off_profile").format(count=row.off_profile) }}</span>{% endif %}
+            {% if row.off_recommendation %}<span class="px-2 py-0.5 rounded-full bg-sky-950/30 text-sky-300 whitespace-nowrap">{{ t("config_settings_flag_off_recommendation").format(count=row.off_recommendation) }}</span>{% endif %}
+            {% if row.exceptions %}<span class="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 whitespace-nowrap" title="{{ t('config_exception_help') }}">{{ t("config_overview_exceptions").format(count=row.exceptions) }}</span>{% endif %}
+          </span>
+          <span class="config-setting-open text-slate-500" aria-hidden="true">›</span>
+        </button>
+      </li>
+      {% endfor %}
+    </ul>
+    <p data-settings-no-match class="hidden px-4 py-6 text-sm text-slate-400">{{ t("config_settings_no_match") }}</p>
+  </section>
+  {% endif %}
+  {% endif %}
+
+  <div class="config-drawer-backdrop hidden" data-drawer-backdrop></div>
+  <aside class="config-drawer hidden" data-settings-drawer role="dialog" aria-modal="true" aria-label="{{ t('config_settings_detail') }}"
+         data-loading="{{ t('config_compare_loading') }}" data-failed="{{ t('config_compare_failed') }}"></aside>
+</div>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ url_for('static', filename='js/pages/server-configuration.js', v=g.app_version|default('dev')) }}"></script>
+  {% include "partials/confirm_modal.html" %}
+{% endblock %}

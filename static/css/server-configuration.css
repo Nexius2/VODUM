@@ -1,0 +1,93 @@
+/* Compliance pages. Only what the shared Tailwind build does not provide. */
+
+/* Mode badge, shown on every Compliance page. */
+.config-mode-dot { display: inline-block; width: .5rem; height: .5rem; border-radius: 9999px; background: rgb(52 211 153); }
+.config-mode-dot.is-manual { background: rgb(251 191 36); }
+
+/* Filter buttons (KPI tiles and "show" toggles): the pressed one is highlighted. */
+.config-kpi[aria-pressed="true"], .config-toggle[aria-pressed="true"] {
+  border-color: var(--color-primary, #6366f1); background: rgba(99, 102, 241, .14); color: rgb(224 231 255);
+}
+.config-toggle:focus-visible, .config-kpi:focus-visible { outline: 2px solid var(--color-primary, #6366f1); outline-offset: 2px; }
+
+/* Settings view: one line per setting, its values side by side. */
+.config-setting-row { grid-template-columns: minmax(12rem, 1.4fr) minmax(12rem, 2fr) 13rem 11rem 1rem; align-items: center; }
+.config-setting-head { display: grid; gap: .75rem; }
+@media (max-width: 1023px) {
+  .config-setting-head { display: none; }
+  .config-setting-row { grid-template-columns: 1fr auto; }
+  .config-setting-values, .config-setting-reco { grid-column: 1 / -1; }
+  .config-setting-flags { grid-row: 1; grid-column: 2; }
+  .config-setting-open { display: none; }
+}
+.config-setting-open { font-size: 1.1rem; line-height: 1; }
+.config-chip {
+  display: inline-flex; align-items: center; gap: .35rem; max-width: 16rem; padding: .15rem .55rem;
+  border-radius: 9999px; border: 1px solid rgb(51 65 85); background: rgb(15 23 42); color: rgb(226 232 240); font-size: .8125rem;
+}
+.config-chip-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.config-chip-count { color: rgb(148 163 184); font-size: .75rem; }
+.config-chip.is-different { border-color: rgba(251, 191, 36, .45); background: rgba(120, 53, 15, .18); }
+.config-chip.is-neutral { color: rgb(148 163 184); background: rgb(2 6 23); }
+.config-chip.is-missing { font-style: italic; color: rgb(100 116 139); border-style: dashed; }
+
+/* Server picker of the scope selector. */
+.config-picker { position: relative; }
+.config-picker > summary { list-style: none; }
+.config-picker > summary::-webkit-details-marker { display: none; }
+.config-picker-panel { position: absolute; z-index: 40; top: calc(100% + .4rem); left: 0; width: 20rem; max-width: 85vw; box-shadow: 0 10px 25px rgba(0, 0, 0, .45); }
+.config-picker-list { max-height: 18rem; overflow-y: auto; }
+
+/* Side panel of one setting. */
+.config-drawer-backdrop { position: fixed; inset: 0; z-index: 60; background: rgba(2, 6, 23, .6); }
+.config-drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 61; width: 34rem; max-width: 100vw;
+  display: flex; flex-direction: column; background: rgb(15 23 42); border-left: 1px solid rgb(30 41 59);
+  box-shadow: -10px 0 30px rgba(0, 0, 0, .45);
+}
+.config-drawer.hidden, .config-drawer-backdrop.hidden { display: none; }
+.config-drawer-inner { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+.config-drawer-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.config-drawer-footer { flex: 0 0 auto; background: rgb(15 23 42); }
+body.config-drawer-open { overflow: hidden; }
+.config-detail-servers.is-collapsed > li:nth-child(n+13) { display: none; }
+.config-edit-control {
+  min-width: 8rem; background: rgb(30 41 59); border: 1px solid rgb(71 85 105); border-radius: .375rem;
+  padding: .45rem .6rem; color: rgb(226 232 240); font-size: .875rem;
+}
+.config-edit-control:focus { outline: none; border-color: var(--color-primary, #6366f1); }
+.config-setting-name { min-width: 0; }
+
+/* Settings view: "Show" is one exclusive choice, drawn as a segmented control. */
+.config-segmented { display: inline-flex; flex-wrap: wrap; border: 1px solid rgb(51 65 85); border-radius: .5rem; overflow: hidden; }
+.config-segment { display: inline-flex; align-items: center; gap: .4rem; border-right: 1px solid rgb(51 65 85); }
+.config-segment:last-child { border-right: 0; }
+.config-segment:hover { background: rgb(30 41 59); }
+.config-segment[aria-checked="true"] { background: rgba(99, 102, 241, .22); color: rgb(224 231 255); }
+.config-segment:focus-visible { outline: 2px solid var(--color-primary, #6366f1); outline-offset: -2px; }
+.config-segment-count { font-size: .7rem; padding: 0 .4rem; border-radius: 9999px; background: rgb(30 41 59); color: rgb(148 163 184); }
+.config-segment[aria-checked="true"] .config-segment-count { background: rgba(99, 102, 241, .35); color: rgb(224 231 255); }
+.config-segment.is-empty { color: rgb(100 116 139); }
+
+/* Overview: the whole line of a server opens it. */
+.config-overview-row[data-href] { cursor: pointer; }
+.config-overview-row[data-href]:hover { background: rgba(30, 41, 59, .6); }
+
+/* Phones: same pages, laid out for a narrow screen (see admin-mobile.css). */
+@media (max-width: 767px) {
+  .config-tabs { flex-wrap: nowrap; overflow-x: auto; width: 100%; scrollbar-width: thin; }
+  .config-tabs > a { flex-shrink: 0; white-space: nowrap; }
+  .config-filter-bar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .config-filter-bar > :first-child, .config-filter-bar > :last-child:nth-child(even) { grid-column: 1 / -1; }
+  .config-filter-bar select { width: 100%; }
+  .config-segmented { display: flex; flex-wrap: wrap; gap: .4rem; border: 0; overflow: visible; }
+  .config-segment, .config-segment:last-child { border: 1px solid rgb(51 65 85); border-radius: .5rem; }
+  .config-setting-flags { grid-row: auto; grid-column: 1 / -1; justify-content: flex-start; }
+  .config-overview-actions:not(:has(form)) { display: none !important; }
+  [data-settings-scope] { position: relative; }
+  .config-picker { position: static; }
+  .config-picker-panel { left: 0; right: 0; width: auto; max-width: none; }
+  .config-select-row { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
+  .config-select-row > button { flex-shrink: 0; white-space: nowrap; }
+  .config-drawer-footer { max-height: 55vh; overflow-y: auto; }
+}

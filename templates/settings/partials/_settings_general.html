@@ -1,0 +1,171 @@
+<div class="bg-slate-900 p-6 rounded-xl border border-slate-800">
+  <h2 class="text-lg font-semibold text-slate-200 mb-1">{{ t("general_settings") }}</h2>
+  <p class="text-sm text-slate-400 mb-6">{{ t("settings_section_general_desc") }}</p>
+
+  <div class="space-y-4">
+
+    <!-- Language -->
+    <div>
+      <label class="block text-sm mb-1 text-slate-300">{{ t("settings_ui_language") }}</label>
+      <select name="default_language"
+              class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+        <option value="" {% if not settings.default_language %}selected{% endif %}>
+          🌐 {{ t("language_auto") }}
+        </option>
+        {% for code, name in available_languages.items() %}
+          <option value="{{ code }}" {% if settings.default_language == code %}selected{% endif %}>
+            {{ name }}
+          </option>
+        {% endfor %}
+      </select>
+
+      {% if not settings.default_language %}
+        <p class="text-xs text-slate-400 mt-1">{{ t("language_auto_hint") }}</p>
+      {% endif %}
+    </div>
+
+
+    <!-- Timezone -->
+    <div>
+      <label class="block text-sm mb-1 text-slate-300">{{ t("timezone") }}</label>
+      <input type="text" name="timezone"
+             value="{{ settings.timezone }}"
+             class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm"
+             placeholder="Europe/Paris">
+    </div>
+
+    <!-- Contact Email -->
+    <div>
+      <label class="block text-sm mb-1 text-slate-300">{{ t("contact_email") }}</label>
+      <input type="email" name="contact_email"
+             value="{{ settings.contact_email or settings.admin_email or '' }}"
+             class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+      <p class="text-xs text-slate-400 mt-1">{{ t("contact_email_help") }}</p>
+    </div>
+
+    <!-- Brand name -->
+    <div>
+      <label class="block text-sm mb-1 text-slate-300">{{ t("brand_name") }}</label>
+      <input type="text" name="brand_name"
+             value="{{ settings.brand_name or '' }}"
+             class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm"
+             placeholder="{{ t('brand_name_placeholder') }}">
+      <p class="text-xs text-slate-400 mt-1">{{ t("brand_name_hint") }}</p>
+    </div>
+
+<div class="pt-4 border-t border-slate-800">
+  <label class="block text-sm mb-1 text-slate-300">{{ t('settings_brand_logo') }}</label>
+  {% if settings.portal_logo_url %}<div class="mb-3 flex items-center gap-3"><img src="{{ settings.portal_logo_url }}" alt="" class="h-14 w-14 rounded border border-slate-700 bg-slate-950 object-contain"><label class="flex items-center gap-2 text-xs text-slate-400"><input type="checkbox" name="remove_brand_logo" value="1">{{ t('settings_remove_logo') }}</label></div>{% endif %}
+  <div class="flex flex-wrap items-center gap-3">
+    <label class="relative inline-flex cursor-pointer items-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow hover:bg-primary-dark focus-within:ring-2 focus-within:ring-primary/50">
+      <span>{{ t('settings_choose_logo') }}</span>
+      <input type="file" name="brand_logo" accept="image/png,image/jpeg,image/gif,image/webp" class="sr-only" data-logo-input>
+    </label>
+    <span data-logo-filename data-empty-label="{{ t('settings_no_logo_selected') }}" class="text-sm text-slate-400">{{ t('settings_no_logo_selected') }}</span>
+  </div>
+  <p class="mt-1 text-xs text-slate-500">{{ t('settings_brand_logo_help') }}</p>
+</div>
+
+<!-- Anonymous telemetry -->
+<div class="pt-4 border-t border-slate-800">
+
+  <div class="flex items-center gap-2">
+
+    <label class="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+
+      <input
+        type="checkbox"
+        name="enable_anonymous_telemetry"
+        class="rounded border-slate-700 bg-slate-800"
+        {% if settings.enable_anonymous_telemetry %}checked{% endif %}
+      >
+
+      <span>{{ t("send_anonymous_telemetry") }}</span>
+
+    </label>
+
+    <button
+      type="button"
+      data-settings-modal-open="telemetry-modal"
+      class="w-5 h-5 rounded-full bg-slate-700 hover:bg-slate-600 text-xs text-white"
+    >
+      ?
+    </button>
+
+  </div>
+
+  <p class="text-xs text-slate-400 mt-1">
+    {{ t("telemetry_help_improve") }}
+  </p>
+
+</div>
+
+<!-- Telemetry modal -->
+<div
+  id="telemetry-modal"
+  data-settings-modal-backdrop
+  class="hidden fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
+>
+
+  <div class="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-2xl p-6">
+
+    <div class="flex items-center justify-between mb-4">
+
+      <h3 class="text-lg font-semibold text-white">
+        {{ t("anonymous_telemetry") }}
+      </h3>
+
+      <button
+        type="button"
+        data-settings-modal-close="telemetry-modal"
+        class="text-slate-400 hover:text-white"
+      >
+        ✕
+      </button>
+
+    </div>
+
+    <div class="space-y-4 text-sm text-slate-300">
+
+      <p>
+        {{ t("telemetry_modal_intro") }}
+      </p>
+
+      <p class="text-green-400 font-medium">
+        {{ t("telemetry_modal_no_private_data") }}
+      </p>
+
+      <div>
+
+        <p class="mb-2">
+          {{ t("telemetry_modal_sent_data") }}
+        </p>
+
+        <ul class="list-disc pl-5 space-y-1 text-slate-400">
+          <li>{{ t("telemetry_data_version") }}</li>
+          <li>{{ t("telemetry_data_platform") }}</li>
+          <li>{{ t("telemetry_data_python") }}</li>
+          <li>{{ t("telemetry_data_docker") }}</li>
+          <li>{{ t("telemetry_data_users") }}</li>
+          <li>{{ t("telemetry_data_plex") }}</li>
+          <li>{{ t("telemetry_data_jellyfin") }}</li>
+          <li>{{ t("telemetry_data_features") }}</li>
+          <li>{{ t("telemetry_data_collections") }}</li>
+          <li>{{ t("telemetry_data_country") }}</li>
+        </ul>
+
+      </div>
+
+      <p class="text-slate-500 text-xs">
+        {{ t("telemetry_modal_no_sensitive") }}
+      </p>
+
+    </div>
+
+  </div>
+
+</div>
+
+  </div>
+</div>
+

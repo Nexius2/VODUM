@@ -1,0 +1,71 @@
+{% macro show(value) -%}
+{%- if value is none -%}{{ t("config_compliance_missing") }}{%- elif value == "true" -%}{{ t("yes") }}{%- elif value == "false" -%}{{ t("no") }}{%- elif value == "" -%}∅{%- else -%}{{ value }}{%- endif -%}
+{%- endmacro %}
+{%- set state_styles = {"done": "bg-emerald-900/40 text-emerald-300", "failed": "bg-rose-900/40 text-rose-300",
+                         "error": "bg-amber-950/40 text-amber-300", "pending": "bg-slate-800 text-slate-300"} -%}
+<section data-deploy-server="{{ group.id }}" data-state="{{ group.state }}"
+         data-apply-url="{{ url_for('server_configuration_deployment_apply', deployment_id=deployment.id, server_id=group.id) }}"
+         class="bg-slate-900 rounded-xl border border-slate-800">
+  <div class="px-6 py-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-800">
+    <div class="flex flex-wrap items-center gap-2 text-sm text-slate-200">
+      {{ group.name }}
+      <span class="px-2 py-0.5 rounded-full text-xs {{ state_styles.get(group.state, 'bg-slate-800 text-slate-400') }}" data-deploy-state>{{ t("config_deploy_server_" ~ group.state) }}</span>
+    </div>
+    <div class="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+      {% if group.counts.verified %}<span class="text-emerald-300">{{ t("config_deploy_count_verified").format(count=group.counts.verified) }}</span>{% endif %}
+      {% if group.counts.failed %}<span class="text-rose-300">{{ t("config_deploy_count_failed").format(count=group.counts.failed) }}</span>{% endif %}
+      {% if group.counts.failed and deployment.status != "draft" %}
+      <form method="POST" action="{{ url_for('server_configuration_deployment_retry', deployment_id=deployment.id) }}">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="server_id" value="{{ group.id }}">
+        <button type="submit" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200">{{ t("config_deploy_retry_server") }}</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  {% if apply_error %}<p class="px-6 pt-2 text-xs text-amber-300">{{ t(apply_error) }}</p>{% endif %}
+  {% if group.error %}
+  <p class="px-6 py-4 text-sm text-amber-300">{{ t(group.error) }}</p>
+  {% elif not group["items"] %}
+  <p class="px-6 py-4 text-sm text-slate-400">{{ t("config_deploy_nothing_to_change") }}</p>
+  {% else %}
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm" data-mobile-primary="{{ 1 if deployment.status == 'draft' else 0 }}">
+      <thead class="text-left text-xs text-slate-400 border-b border-slate-800">
+        <tr>
+          {% if deployment.status == "draft" %}<th class="px-6 py-2 font-medium w-10"><span class="sr-only">{{ t("config_deploy_apply") }}</span></th>{% endif %}
+          <th class="px-6 py-2 font-medium">{{ t("config_matrix_setting") }}</th>
+          <th class="px-6 py-2 font-medium">{{ t("config_compliance_actual") }}</th>
+          <th class="px-6 py-2 font-medium">{{ t("config_matrix_expected") }}</th>
+          <th class="px-6 py-2 font-medium">{{ t("config_deploy_result") }}</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-800">
+        {% for item in group["items"] %}
+        <tr data-deploy-item="{{ item.id }}" data-status="{{ item.status }}" class="{% if item.status in ('excluded', 'skipped') %}text-slate-500{% endif %}">
+          {% if deployment.status == "draft" %}
+          <td class="px-6 py-2 align-top">
+            {% if item.status == "planned" %}
+            <input type="checkbox" name="item_ids" value="{{ item.id }}" form="config-deploy-confirm" checked
+                   aria-label="{{ t('config_deploy_apply') }} · {{ group.name }} · {{ item.label }}" class="w-4 h-4 rounded border-slate-600 bg-slate-800">
+            {% endif %}
+          </td>
+          {% endif %}
+          <td class="px-6 py-2 align-top">
+            <div class="{% if item.status not in ('excluded', 'skipped') %}text-slate-200{% endif %}">{% if item.library %}<span class="text-slate-400">{{ item.library }} · </span>{% endif %}{{ item.label }}</div>
+            <div class="text-[11px] text-slate-500">{{ t("server_config_cat_" ~ item.category) }}</div>
+          </td>
+          <td class="px-6 py-2 align-top break-all">{{ show(item.previous_display) }}</td>
+          <td class="px-6 py-2 align-top break-all">{{ show(item.expected_display) }}</td>
+          <td class="px-6 py-2 align-top text-xs">
+            {% if item.status == "excluded" %}<span class="text-slate-400">{{ t(item.reason) }}</span>
+            {% elif item.status == "failed" %}<span class="text-rose-300">{{ t(item.error or "config_deploy_not_applied") }}</span>
+            {% else %}<span class="{% if item.status == 'verified' %}text-emerald-300{% else %}text-slate-400{% endif %}">{{ t("config_item_" ~ item.status) }}</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>

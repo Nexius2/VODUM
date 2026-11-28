@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% set active_page = 'backup' %}
+
+{% block title %}{{ t("backup") }} - VODUM{% endblock %}
+{% block header_title %}{{ t("backup_restore") }}{% endblock %}
+{% block header_subtitle %}{{ t("backup_subtitle") }}{% endblock %}
+
+{% block content %}
+
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+  {% for title, diagnostic in [(t("last_backup_result"), backup_diagnostic), (t("sqlite_integrity"), integrity_diagnostic)] %}
+  <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+    <div class="flex items-center justify-between gap-3">
+      <div class="text-sm font-semibold">{{ title }}</div>
+      <span class="text-xs font-semibold {% if diagnostic.status == 'error' %}text-rose-300{% elif diagnostic.last_run %}text-emerald-300{% else %}text-slate-400{% endif %}">
+        {{ diagnostic.status or 'unknown' }}
+      </span>
+    </div>
+    <div class="text-xs text-slate-400 mt-2">
+      {{ t("last_run") }}:
+      {{ diagnostic.last_run|browser_datetime if diagnostic.last_run else '-' }}
+    </div>
+    {% if title == t("sqlite_integrity") %}
+    <div class="text-xs text-slate-400 mt-2">
+      {{ t("db_size") }}:
+      {% if db_size_bytes is defined and db_size_bytes %}
+        {% set mb = db_size_bytes / 1024 / 1024 %}
+        {% set gb = mb / 1024 %}
+        <span class="font-semibold text-slate-100">
+          {% if gb >= 1 %}
+            {{ gb|round(2) }} GB
+          {% else %}
+            {{ mb|round(2) }} MB
+          {% endif %}
+        </span>
+        <span class="ml-1 text-[11px] text-slate-500">({{ db_size_bytes }} {{ t("bytes_unit") }})</span>
+      {% else %}
+        <span class="text-slate-500">{{ t("not_available") }}</span>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% if diagnostic.last_error %}
+    <div class="text-xs text-rose-300 mt-2 break-words">{{ diagnostic.last_error }}</div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 items-stretch">
+
+  <!-- Creation backup -->
+	<div>
+	  {% include "backup/_retention_settings.html" %}
+	</div>
+
+  <!-- Restore & import -->
+	<div>
+	  {% include "backup/_restore_upload.html" %}
+	</div>
+
+	<div>
+	  {% include "backup/_manual_backup.html" %}
+	</div>
+
+	<div>
+	  {% include "backup/_tautulli_import.html" %}
+	</div>
+
+
+
+</div>
+
+<!-- Liste des backups existants -->
+<div class="mt-8 relative z-10 bg-slate-900 border border-slate-800 rounded-2xl p-6 overflow-visible">
+  {% include "backup/_backups_list.html" %}
+</div>
+<div id="restore-waiting-modal"
+     class="hidden fixed inset-0 z-[99999] items-center justify-center bg-black/80 backdrop-blur-sm">
+  <div class="w-[92%] max-w-md rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl p-6 text-center">
+    <div class="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-slate-700 border-t-primary"></div>
+
+	<h3 class="text-base font-semibold text-white">
+	  {{ t("restore_in_progress") }}
+	</h3>
+
+	<p class="mt-3 text-sm text-slate-400 leading-relaxed">
+	  {{ t("restore_in_progress_description") }}
+	</p>
+	<p class="mt-2 text-xs text-amber-400">
+	  {{ t("restore_in_progress_warning") }}
+	</p>
+  </div>
+</div>
+
+<script type="application/json" id="vodum-backup-config">
+{
+  "autoRefreshBackups": {{ "true" if request.args.get("refresh_backups") == "1" else "false" }},
+  "tautulliStatusUrl": {{ url_for("tautulli_import_status")|tojson }},
+  "i18n": {
+    "download": {{ (t("download") if t("download") else "Download")|tojson }},
+    "restore": {{ t("restore_btn")|tojson }},
+    "delete": {{ (t("delete") if t("delete") else "Delete")|tojson }},
+    "confirmRestore": {{ t("confirm_restore")|tojson }},
+    "tautulliSelectFileFirst": {{ t("tautulli_select_file_first")|tojson }},
+    "tautulliStatusQueued": {{ t("tautulli_status_queued")|tojson }},
+    "tautulliStatusRunning": {{ t("tautulli_status_running")|tojson }},
+    "tautulliStatusSuccess": {{ t("tautulli_status_success")|tojson }},
+    "tautulliStatusError": {{ t("tautulli_status_error")|tojson }},
+    "tautulliStatusOther": {{ t("tautulli_status_other")|tojson }}
+  }
+}
+</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/pages/backup.js', v=g.app_version|default('dev')) }}"></script>
+{% endblock %}

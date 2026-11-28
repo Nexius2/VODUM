@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% set active_page = "server_configuration" %}
+
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/server-configuration.css', v=g.app_version|default('dev')) }}">{% endblock %}
+{% block header_title %}{{ t("server_config_title") }}{% endblock %}
+{% block header_subtitle %}{{ t("config_deploy_kind_" ~ deployment.kind) }} · {{ deployment.source_name }}{% endblock %}
+
+{% block content %}
+<div class="space-y-6" data-config-deployment-page data-status="{{ deployment.status }}">
+  {% include "server_configuration/_nav.html" %}
+
+  <section class="bg-slate-900 p-6 rounded-xl border border-slate-800 space-y-3">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <h2 class="text-lg font-semibold text-slate-200">
+        {{ t("config_deploy_preview_title") if deployment.status == "draft" else t("config_deploy_status_" ~ deployment.status) }}
+      </h2>
+      <a href="{{ url_for('server_configuration_deploy') }}" class="text-sm text-primary hover:underline">{{ t("config_deploy_back") }}</a>
+    </div>
+    <div class="flex flex-wrap gap-2 text-sm">
+      {% for status in ("planned", "pending", "verified", "failed", "skipped", "excluded") if deployment.counts[status] %}
+      <div class="px-3 py-2 rounded-lg border border-slate-800 bg-slate-950">
+        <span class="text-slate-100 font-semibold">{{ deployment.counts[status] }}</span>
+        <span class="text-slate-400">{{ t("config_item_" ~ status) }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% if deployment.status == "draft" %}
+    <p class="text-sm text-slate-400">{{ t("config_deploy_preview_help_long") }}</p>
+    {% if mode != "manual" %}
+    <div class="rounded-lg border border-amber-800/60 bg-amber-950/20 p-3 text-sm text-amber-200">
+      {{ t("config_mode_monitoring_only") }}
+      <a href="{{ url_for('server_configuration_deploy') }}" class="underline">{{ t("config_mode_title") }}</a>
+    </div>
+    {% endif %}
+    <div class="flex flex-wrap gap-3">
+      {% if mode == "manual" and deployment.counts.planned %}
+      <form id="config-deploy-confirm" method="POST" action="{{ url_for('server_configuration_deployment_confirm', deployment_id=deployment.id) }}"
+            data-confirm="{{ t('config_deploy_confirm_message') }}" data-confirm-title="{{ t('config_deploy_confirm') }}"
+            data-confirm-label="{{ t('config_deploy_confirm') }}">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="px-4 py-2 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-sm">{{ t("config_deploy_confirm") }}</button>
+      </form>
+      {% endif %}
+      <form method="POST" action="{{ url_for('server_configuration_deployment_discard', deployment_id=deployment.id) }}">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm text-slate-200">{{ t("config_deploy_discard") }}</button>
+      </form>
+    </div>
+    {% elif deployment.counts.failed and mode == "manual" %}
+    <form method="POST" action="{{ url_for('server_configuration_deployment_retry', deployment_id=deployment.id) }}">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm text-slate-200">{{ t("config_deploy_retry_all") }}</button>
+    </form>
+    {% endif %}
+    <p class="text-xs text-slate-500" data-deploy-progress role="status" aria-live="polite"
+       data-running-label="{{ t('config_deploy_running') }}"></p>
+  </section>
+
+  {% for group in deployment.servers %}
+  {% include "server_configuration/_deploy_server.html" %}
+  {% else %}
+  <p class="text-sm text-slate-400">{{ t("config_deploy_nothing_to_change") }}</p>
+  {% endfor %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ url_for('static', filename='js/pages/server-configuration.js', v=g.app_version|default('dev')) }}"></script>
+  {% include "partials/confirm_modal.html" %}
+{% endblock %}

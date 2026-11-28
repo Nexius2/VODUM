@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="{{ active_lang or 'en' }}">
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}VODUM{% endblock %}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <script src="{{ url_for('static', filename='js/error-reporting.js', v=g.app_version|default('dev')) }}"></script>
+
+  <!-- Browser icons -->
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icon.png', v=g.app_version|default('dev')) }}">
+
+  <!-- iOS Home Screen icon -->
+  <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='img/apple-touch-icon.png', v=g.app_version|default('dev')) }}">
+
+  <!-- Android / PWA icons -->
+  <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='img/icons/icon-192.png', v=g.app_version|default('dev')) }}">
+  <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='img/icons/icon-512.png', v=g.app_version|default('dev')) }}">
+
+  <!-- PWA -->
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.json', v=g.app_version|default('dev')) }}">
+  <meta name="theme-color" content="#020617">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="VODUM">
+
+  <script src="{{ url_for('static', filename='vendor/htmx/htmx.min.js', v=g.app_version|default('dev')) }}"></script>
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/vodum.css', v=g.app_version|default('dev')) }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css', v=g.app_version|default('dev')) }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/admin-mobile.css', v=g.app_version|default('dev'), revision='table-cards-2') }}">
+  {% block head %}{% endblock %}
+</head>
+
+<body class="admin-shell bg-slate-950 text-slate-100" data-admin-page="{{ active_page }}" data-close-label="{{ t('common.close') }}">
+  {% set brand_length = (app_brand_name or '')|length %}
+  {% set brand_text_size = 'text-xl' if brand_length <= 20 else ('text-base' if brand_length <= 32 else ('text-sm' if brand_length <= 44 else 'text-xs')) %}
+  <svg aria-hidden="true" class="hidden">
+    <symbol id="vodum-icon-dashboard" viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+    <symbol id="vodum-icon-tv" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 21h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="vodum-icon-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="9.5" cy="7" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="vodum-icon-server" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="3" y="14" width="18" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 7h.01M7 17h.01M11 7h6M11 17h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="vodum-icon-gift" viewBox="0 0 24 24"><path d="M20 12v8H4v-8M2 8h20v4H2zM12 8v12" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 8H8.5A2.5 2.5 0 1 1 11 5.5L12 8Zm0 0h3.5A2.5 2.5 0 1 0 13 5.5L12 8Z" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+    <symbol id="vodum-icon-message" viewBox="0 0 24 24"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+    <symbol id="vodum-icon-move" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6M5 5v14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="vodum-icon-save" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M17 21v-8H7v8M7 3v5h8" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+    <symbol id="vodum-icon-settings" viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M19.4 15a1.8 1.8 0 0 0 .36 1.98l.05.05a2.1 2.1 0 0 1-2.97 2.97l-.05-.05a1.8 1.8 0 0 0-1.98-.36 1.8 1.8 0 0 0-1.1 1.66V21a2.1 2.1 0 0 1-4.2 0v-.08a1.8 1.8 0 0 0-1.1-1.66 1.8 1.8 0 0 0-1.98.36l-.05.05a2.1 2.1 0 0 1-2.97-2.97l.05-.05A1.8 1.8 0 0 0 4.6 15a1.8 1.8 0 0 0-1.66-1.1H3a2.1 2.1 0 0 1 0-4.2h.08A1.8 1.8 0 0 0 4.74 8.6a1.8 1.8 0 0 0-.36-1.98l-.05-.05A2.1 2.1 0 0 1 7.3 3.6l.05.05a1.8 1.8 0 0 0 1.98.36A1.8 1.8 0 0 0 10.43 2.35V2a2.1 2.1 0 0 1 4.2 0v.08a1.8 1.8 0 0 0 1.1 1.66 1.8 1.8 0 0 0 1.98-.36l.05-.05a2.1 2.1 0 0 1 2.97 2.97l-.05.05a1.8 1.8 0 0 0-.36 1.98 1.8 1.8 0 0 0 1.66 1.1H22a2.1 2.1 0 0 1 0 4.2h-.08A1.8 1.8 0 0 0 19.4 15Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="vodum-icon-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="vodum-icon-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="vodum-icon-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9.5 9a2.7 2.7 0 1 1 4.7 1.8c-.9.8-1.7 1.3-1.7 2.7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="vodum-icon-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 11v6M12 7h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="vodum-icon-logout" viewBox="0 0 24 24"><path d="M10 17l5-5-5-5M15 12H3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 3h4a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  </svg>
+<div class="min-h-screen md:flex">
+    <!-- Mobile top bar -->
+    <div class="admin-mobile-header md:hidden sticky top-0 z-40 h-14 bg-slate-950/95 border-b border-slate-800 backdrop-blur flex items-center justify-between px-4">
+      <a href="{{ url_for('dashboard') }}"
+         class="flex min-w-0 flex-1 items-center justify-start gap-3 rounded-lg {{ brand_text_size }} font-bold leading-tight tracking-tight transition-colors hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
+         aria-label="{{ t('dashboard') }}">
+        {% if portal_logo_url %}<img src="{{ portal_logo_url }}" alt="" class="h-8 w-8 shrink-0 rounded object-contain">{% endif %}<span class="min-w-0 truncate">{{ app_brand_name }}</span>
+      </a>
+      <button id="mobileMenuOpen" aria-controls="mobileMenu" aria-expanded="false" aria-label="{{ t('portal_menu') }}"
+              type="button"
+              class="inline-flex items-center justify-center rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+    </div>
+
+    <!-- Mobile menu -->
+    <div id="mobileMenu" class="fixed inset-0 z-50 hidden md:hidden">
+      <div id="mobileMenuBackdrop" class="absolute inset-0 bg-black/70"></div>
+
+      <div role="dialog" aria-modal="true" aria-label="{{ t('portal_menu') }}" class="admin-menu-panel absolute left-0 top-0 h-full w-72 max-w-[85vw] bg-slate-900 border-r border-slate-800 flex flex-col">
+        <div class="h-14 flex items-center justify-between px-4 border-b border-slate-800">
+          <a href="{{ url_for('dashboard') }}"
+             class="flex min-w-0 flex-1 items-center justify-start gap-3 rounded-lg {{ brand_text_size }} font-bold leading-tight tracking-tight transition-colors hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
+             aria-label="{{ t('dashboard') }}">
+            {% if portal_logo_url %}<img src="{{ portal_logo_url }}" alt="" class="h-8 w-8 shrink-0 rounded object-contain">{% endif %}<span class="min-w-0 truncate">{{ app_brand_name }}</span>
+          </a>
+          <button id="mobileMenuClose" aria-label="{{ t('common.close') }}"
+                  type="button"
+                  class="rounded-lg border border-slate-700 px-3 py-1.5 text-slate-100">
+            &times;
+          </button>
+        </div>
+
+        <nav id="mobileMenuNav" class="flex-1 px-2 py-4 space-y-1 text-sm overflow-y-auto"></nav>
+      </div>
+    </div>
+
+    <!-- Sidebar desktop -->
+    <aside id="desktopSidebar" class="hidden md:flex w-64 bg-slate-900 border-r border-slate-800 flex-col sticky top-0 h-screen">
+
+      <!-- Header -->
+      <div class="h-16 flex items-center px-4 border-b border-slate-800">
+        <a href="{{ url_for('dashboard') }}"
+           class="flex min-w-0 flex-1 items-center justify-start gap-3 rounded-lg {{ brand_text_size }} font-bold leading-tight tracking-tight transition-colors hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
+           aria-label="{{ t('dashboard') }}">
+          {% if portal_logo_url %}<img src="{{ portal_logo_url }}" alt="" class="h-9 w-9 shrink-0 rounded object-contain">{% endif %}<span class="min-w-0 truncate">{{ app_brand_name }}</span>
+        </a>
+      </div>
+
+      <!-- Menu (scroll interne si nécessaire) -->
+      <nav class="flex-1 px-2 py-4 space-y-1 text-sm overflow-y-auto">
+
+        <a href="{{ url_for('dashboard') }}"
+           class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='dashboard' }}">
+          <svg class="mr-2 h-4 w-4 shrink-0" aria-hidden="true"><use href="#vodum-icon-dashboard"></use></svg>
+          {{ t("dashboard") }}
+        </a>
+
+        <a href="{{ url_for('monitoring_page') }}"
+           class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='monitoring' }}">
+          <svg class="mr-2 h-4 w-4 shrink-0" aria-hidden="true"><use href="#vodum-icon-tv"></use></svg>
+          {{ t("monitoring") }}
+        </a>
+
+        {% set nav_open_users = active_page in ['users', 'subscriptions', 'communications', 'portal_settings'] %}
+        <div class="vodum-nav-section{{ ' is-open' if nav_open_users }}">
+          <a href="{{ url_for('users_list') }}" class="vodum-nav-group" aria-expanded="{{ 'true' if nav_open_users else 'false' }}">
+            <svg class="mr-2 h-4 w-4 shrink-0" aria-hidden="true"><use href="#vodum-icon-users"></use></svg>
+            <span>{{ t("nav.group.users") }}</span>
+            <svg class="vodum-nav-group__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+          </a>
+          <div class="vodum-nav-items"{{ ' hidden' if not nav_open_users }}>
+
+          <a href="{{ url_for('users_list') }}"
+             class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='users' }}">
+            <svg class="mr-2 h-4 w-4 shrink-0" aria-hidden="true"><use href="#vodum-icon-users"></use></svg>
+            {{ t("users") }}
+          </a>
+
+          <a href="{{ url_for('subscriptions') }}"
+             class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='subscriptions' }}">
+            <svg class="mr-2 h-4 w-4 shrink-0" aria-hidden="true"><use href="#vodum-icon-gift"></use></svg>
+            {{ t("subscriptions") }}
+          </a>
+
+          <a href="{{ url_for('communications_page') }}"
+             class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='communications' }}">
+            <svg class="mr-2 h-4 w-4 shrink-0" aria-hidden="true"><use href="#vodum-icon-message"></use></svg>
+            {{ t("communications") }}
+          </a>
+
+          <a href="{{ url_for('portal_settings_page') }}"
+             class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='portal_settings' }}">
+            <svg class="mr-2 h-4 w-4 shrink-0" aria-hidden="true"><use href="#vodum-icon-users"></use></svg>
+            {{ t("portal_users") }}
+          </a>
+          </div>
+        </div>
+
+        {% set nav_open_servers = active_page in ['servers', 'server_configuration', 'migrations'] %}
+        <div class="vodum-nav-section{{ ' is-open' if nav_open_servers }}">
+          <a href="{{ url_for('servers_list') }}" class="vodum-nav-group" aria-expanded="{{ 'true' if nav_open_servers else 'false' }}">
+            <svg class="mr-2 h-4 w-4 shrink-0" aria-hidden="true"><use href="#vodum-icon-server"></use></svg>
+            <span>{{ t("nav.group.servers") }}</span>
+            <svg class="vodum-nav-group__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+          </a>
+          <div class="vodum-nav-items"{{ ' hidden' if not nav_open_servers }}>
+
+          <a href="{{ url_for('servers_list') }}"
+             class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='servers' }}">
+            <svg class="mr-2 h-4 w-4 shrink-0" aria-hidden="true"><use href="#vodum-icon-server"></use></svg>
+            {{ t("servers_libraries") }}
+          </a>
+
+          <a href="{{ url_for('server_configuration_compliance') }}"
+             class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='server_configuration' }}">
+            <svg class="mr-2 h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+            {{ t("server_config_menu") }}
+          </a>
+
+          <a href="{{ url_for('migrations_page') }}"
+             class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='migrations' }}">
+            <svg class="mr-2 h-4 w-4 shrink-0" aria-hidden="true"><use href="#vodum-icon-move"></use></svg>
+            {{ t("migrations") }}
+          </a>
+          </div>
+        </div>
+
+        {% set nav_open_media = active_page in ['collections'] %}
+        <div class="vodum-nav-section{{ ' is-open' if nav_open_media }}">
+          <a href="{{ url_for('collections_page') }}" class="vodum-nav-group" aria-expanded="{{ 'true' if nav_open_media else 'false' }}">
+            <svg class="mr-2 h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="7" y="7" width="14" height="14" rx="2"/><path d="M17 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h2M12 11l5 3-5 3z"/></svg>
+            <span>{{ t("nav.group.media") }}</span>
+            <svg class="vodum-nav-group__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+          </a>
+          <div class="vodum-nav-items"{{ ' hidden' if not nav_open_media }}>
+
+          <a href="{{ url_for('collections_page') }}"
+             class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='collections' }}">
+            <svg class="mr-2 h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="7" y="7" width="14" height="14" rx="2"/><path d="M17 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h2M12 11l5 3-5 3z"/></svg>
+            {{ t("collections.title") }}
+          </a>
+          </div>
+        </div>
+
+        {% set nav_open_vodum = active_page in ['settings', 'backup', 'tasks', 'logs', 'about'] %}
+        <div class="vodum-nav-section{{ ' is-open' if nav_open_vodum }}">
+          <a href="{{ url_for('settings_page') }}" class="vodum-nav-group" aria-expanded="{{ 'true' if nav_open_vodum else 'false' }}">
+            <svg class="mr-2 h-4 w-4 shrink-0" aria-hidden="true"><use href="#vodum-icon-settings"></use></svg>
+            <span>{{ t("nav.group.vodum") }}</span>
+            <svg class="vodum-nav-group__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+          </a>
+          <div class="vodum-nav-items"{{ ' hidden' if not nav_open_vodum }}>
+
+          <a href="{{ url_for('settings_page') }}"
+             class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='settings' }}">
+            <svg class="mr-2 h-4 w-4 shrink-0" aria-hidden="true"><use href="#vodum-icon-settings"></use></svg>
+            {{ t("settings") }}
+          </a>
+
+          <a href="{{ url_for('backup_page') }}"
+             class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='backup' }}">
+            <svg class="mr-2 h-4 w-4 shrink-0" aria-hidden="true"><use href="#vodum-icon-save"></use></svg>
+            {{ t("backup") }}
+          </a>
+
+          <a href="{{ url_for('tasks_page') }}"
+             class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='tasks' }}">
+            <svg class="mr-2 h-4 w-4 shrink-0" aria-hidden="true"><use href="#vodum-icon-clock"></use></svg>
+            {{ t("tasks") }}
+          </a>
+
+          <a href="{{ url_for('logs_page') }}"
+             class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='logs' }}">
+            <svg class="mr-2 h-4 w-4 shrink-0" aria-hidden="true"><use href="#vodum-icon-list"></use></svg>
+            {{ t("logs") }}
+          </a>
+
+          <a href="https://nexius2.github.io/vodum-docs/"
+             target="_blank"
+             class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800">
+            <svg class="mr-2 h-4 w-4 shrink-0" aria-hidden="true"><use href="#vodum-icon-help"></use></svg>
+            {{ t("documentation") }}
+          </a>
+
+          <a href="{{ url_for('about_page') }}"
+             class="flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 {{ 'bg-slate-800 text-primary' if active_page=='about' }}">
+            <svg class="mr-2 h-4 w-4 shrink-0" aria-hidden="true"><use href="#vodum-icon-info"></use></svg>
+            {{ t("about") }}
+          </a>
+          </div>
+        </div>
+
+        <form method="post" action="{{ url_for('logout') }}">
+          <button type="submit"
+                  class="w-full flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 text-left">
+            <svg class="mr-2 h-4 w-4 shrink-0" aria-hidden="true"><use href="#vodum-icon-logout"></use></svg>
+            {{ t("common.logout") }}
+          </button>
+        </form>
+      </nav>
+
+      <!-- Indicateur activité tâches (visible seulement si active > 0) -->
+      <div id="taskActivity" class="px-3 pb-2 text-xs text-slate-400 hidden">
+        <span class="inline-flex items-center gap-2">
+          <span class="inline-block h-3 w-3 rounded-full border-2 border-slate-600 border-t-slate-200 animate-spin"></span>
+          <span id="taskActivityText" data-label="{{ t('task_activity_label') }}">{{ t("task_activity_label") }}</span>
+        </span>
+      </div>
+
+      <!-- Footer version toujours visible -->
+      <div class="p-3 text-xs text-slate-500 border-t border-slate-800 flex items-center justify-between gap-2">
+        <div class="truncate">
+          VODUM · {{ g.app_version|default('dev') }}
+        </div>
+
+        {% if g.update_available %}
+          <span class="ml-2 relative inline-flex group">
+            <span
+              class="inline-flex items-center gap-1
+                     px-2 py-0.5 rounded-md
+                     text-[10px] font-medium tracking-wide
+                     {% if g.update_pending_days >= 30 %}
+					 bg-red-500/20 text-red-300
+					 border border-red-500/60 animate-pulse
+					 {% elif g.update_pending_days >= 7 %}
+					 bg-red-500/10 text-red-300
+					 border border-red-500/40
+					 {% else %}
+					 bg-indigo-500/10 text-indigo-300
+					 border border-indigo-500/30
+					 {% endif %}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24"
+                   stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              UPDATE
+            </span>
+
+            <!-- Tooltip -->
+            <span
+              class="pointer-events-none absolute -top-9 right-0
+                     opacity-0 group-hover:opacity-100
+                     translate-y-1 group-hover:translate-y-0
+                     transition-all duration-150
+                     px-2 py-1 rounded-md
+                     text-[11px] text-slate-100
+                     bg-slate-900 border border-slate-700
+                     shadow-lg whitespace-nowrap"
+            >
+              {% if g.update_pending_days >= 30 %}
+			  {{ t('update_available_since_days')|replace('{days}', g.update_pending_days|string) }}
+			  {{ t('update_critical_delay') }}
+			  {% elif g.update_pending_days >= 7 %}
+			  {{ t('update_available_since_days')|replace('{days}', g.update_pending_days|string) }}
+			  {% else %}
+			  {{ t('update_available') }}
+			  {% endif %}
+            </span>
+          </span>
+        {% endif %}
+      </div>
+    </aside>
+
+    <!-- Main content -->
+    <div class="flex-1 flex flex-col min-w-0">
+      <!-- Header -->
+      <header class="admin-page-header min-h-16 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 md:px-6 py-3 bg-slate-950/80 backdrop-blur">
+        <div class="flex flex-col">
+          <h1 class="text-xl font-semibold text-slate-200">
+            {% block header_title %}{% endblock %}
+          </h1>
+          <p class="text-xs text-slate-400">
+            {% block header_subtitle %}{% endblock %}
+          </p>
+        </div>
+
+        <!-- Zone à droite du header (pour Save) -->
+        <div>
+          {% block header_actions %}{% endblock %}
+        </div>
+      </header>
+
+      <!-- Page content -->
+      <main class="admin-content flex-1 p-4 md:p-6 overflow-x-hidden">
+        <div id="clientFlash" class="space-y-2 mb-4 hidden"></div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div class="space-y-2 mb-4">
+              {% for category, message in messages %}
+                <div class="text-xs px-3 py-2 rounded-lg
+                  {% if category=='success' %}bg-emerald-900/40 text-emerald-100
+                  {% elif category=='error' %}bg-rose-900/40 text-rose-100
+                  {% else %}bg-slate-800 text-slate-100{% endif %}">
+                  {{ t(message) }}
+                </div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+
+  {% include "partials/_admin_mobile_dock.html" %}
+
+  <div id="vodumNavigationLoader" class="vodum-navigation-loader" role="status" aria-live="polite" aria-label="{{ t('loading') }}" hidden>
+    <div class="vodum-navigation-loader__backdrop"></div>
+    <div class="vodum-navigation-loader__panel">
+      <span class="vodum-navigation-loader__spinner" aria-hidden="true"></span>
+      <span class="sr-only">{{ t("loading") }}</span>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/app.js', v=g.app_version|default('dev'), revision='server-status-date-or-time-1') }}"></script>
+  <script src="{{ url_for('static', filename='js/modal_manager.js', v=g.app_version|default('dev')) }}"></script>
+  <script src="{{ url_for('static', filename='js/admin-mobile.js', v=g.app_version|default('dev'), revision='table-cards-2') }}"></script>
+  {% block scripts %}{% endblock %}
+
+</body>
+</html>

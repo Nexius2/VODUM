@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% set active_page = "server_configuration" %}
+
+{% macro show(value) -%}
+{%- if value is none -%}{{ t("config_compliance_missing") }}{%- elif value == "true" -%}{{ t("yes") }}{%- elif value == "false" -%}{{ t("no") }}{%- elif value == "" -%}∅{%- else -%}{{ value }}{%- endif -%}
+{%- endmacro %}
+
+{% set status_styles = {
+  "compliant": "bg-emerald-900/40 text-emerald-300",
+  "non_compliant": "bg-rose-900/40 text-rose-300",
+  "unreachable": "bg-amber-950/40 text-amber-300",
+  "unmanaged": "bg-slate-800 text-slate-400",
+} %}
+{% set buckets = {"compliant": "compliant", "non_compliant": "non_compliant", "unreachable": "unreachable",
+                  "partial": "not_checked", "not_checked": "not_checked", "outdated": "not_checked",
+                  "conflict": "not_checked", "unmanaged": "unmanaged"} %}
+{% set status_order = {"non_compliant": 0, "unreachable": 1, "conflict": 2, "outdated": 3, "partial": 4,
+                       "not_checked": 5, "compliant": 6, "unmanaged": 7} %}
+
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/server-configuration.css', v=g.app_version|default('dev')) }}">{% endblock %}
+{% block header_title %}{{ t("server_config_title") }}{% endblock %}
+{% block header_subtitle %}{{ t("config_overview_subtitle") }}{% endblock %}
+
+{% block content %}
+<div class="space-y-6" data-config-overview>
+  {% include "server_configuration/_nav.html" %}
+
+  <section class="bg-slate-900 p-5 rounded-xl border border-slate-800 space-y-4">
+    <div class="flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <h2 class="text-lg font-semibold text-slate-200">{{ t("config_overview_title") }}</h2>
+        <p class="text-sm text-slate-400 mt-1">{{ t("config_overview_help") }}</p>
+      </div>
+      {% if overview.managed %}
+      <form method="POST" action="{{ url_for('server_configuration_compliance_check') }}" data-config-check-form
+            data-config-progressive="{{ overview.managed_ids|tojson|forceescape }}"
+            data-progress-url="{{ url_for('server_configuration_compliance_check_one', server_id=0) }}"
+            data-progress-label="{{ t('config_overview_checking') }}">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="px-4 py-2 bg-primary hover:bg-primary-dark rounded text-white text-sm"
+                data-loading-label="{{ t('config_compliance_checking') }}">{{ t("config_compliance_check_now") }}</button>
+        <span class="ml-2 text-xs text-slate-400" data-progress-text aria-live="polite"></span>
+      </form>
+      {% endif %}
+    </div>
+
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-2" data-config-compliance-counts>
+      {% for bucket in ("non_compliant", "unreachable", "not_checked", "compliant", "unmanaged") %}
+      <button type="button" data-overview-bucket="{{ bucket }}" aria-pressed="false"
+              class="config-kpi text-left px-4 py-3 rounded-lg border border-slate-800 bg-slate-950 hover:bg-slate-800">
+        <span class="block text-2xl font-semibold {% if bucket == 'non_compliant' and overview.counts[bucket] %}text-rose-300{% elif bucket == 'unreachable' and overview.counts[bucket] %}text-amber-300{% elif bucket == 'compliant' and overview.counts[bucket] %}text-emerald-300{% else %}text-slate-100{% endif %}">{{ overview.counts[bucket] }}</span>
+        <span class="text-xs text-slate-400">{{ t("config_summary_" ~ bucket) }}</span>
+      </button>
+      {% endfor %}
+    </div>
+
+    {% if overview.managed and mode != "manual" %}
+    <p class="text-xs text-slate-500" data-config-monitoring-note>{{ t("config_overview_monitoring_note") }}</p>
+    {% elif mode == "manual" and overview.counts.non_compliant %}
+    <form method="POST" action="{{ url_for('server_configuration_fix') }}" data-config-fix-all>
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm text-slate-200">{{ t("config_fix_all") }}</button>
+    </form>
+    {% endif %}
+    {% if not overview.managed %}
+    <p class="text-sm text-slate-400">{{ t("config_compliance_no_profile") }}
+      <a href="{{ url_for('server_configuration_profiles') }}" class="text-primary hover:underline">{{ t("config_tab_profiles") }}</a></p>
+    {% endif %}
+  </section>
+
+  <section class="bg-slate-900 rounded-xl border border-slate-800" data-overview-list>
+    <div class="config-filter-bar p-4 flex flex-wrap items-end gap-3 border-b border-slate-800">
+      <div class="flex-1 min-w-[12rem]">
+        <label for="overview-search" class="block text-xs mb-1 text-slate-400">{{ t("config_overview_search") }}</label>
+        <input id="overview-search" type="search" data-overview-search autocomplete="off"
+               class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+      </div>
+      {% if overview.providers|length > 1 %}
+      <div>
+        <label for="overview-provider" class="block text-xs mb-1 text-slate-400">{{ t("config_overview_platform") }}</label>
+        <select id="overview-provider" data-overview-provider class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+          <option value="">{{ t("config_overview_all") }}</option>
+          {% for provider in overview.providers %}<option value="{{ provider }}">{{ "Plex" if provider == "plex" else "Jellyfin" }}</option>{% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      {% if groups %}
+      <div>
+        <label for="overview-group" class="block text-xs mb-1 text-slate-400">{{ t("config_tab_groups") }}</label>
+        <select id="overview-group" data-overview-group class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+          <option value="">{{ t("config_overview_all") }}</option>
+          {% for group in groups %}<option value="{{ group.id }}">{{ group.name }}</option>{% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      <div>
+        <label for="overview-sort" class="block text-xs mb-1 text-slate-400">{{ t("config_overview_sort") }}</label>
+        <select id="overview-sort" data-overview-sort class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+          <option value="status">{{ t("config_overview_sort_status") }}</option>
+          <option value="drifts">{{ t("config_overview_sort_drifts") }}</option>
+          <option value="name">{{ t("config_overview_sort_name") }}</option>
+          <option value="checked">{{ t("config_overview_sort_checked") }}</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="text-left text-xs text-slate-400 border-b border-slate-800">
+          <tr>
+            <th class="px-4 py-3 font-medium">{{ t("config_overview_server") }}</th>
+            <th class="px-4 py-3 font-medium">{{ t("config_overview_state") }}</th>
+            <th class="px-4 py-3 font-medium">{{ t("config_reference_profile") }}</th>
+            <th class="px-4 py-3 font-medium">{{ t("config_tab_groups") }}</th>
+            <th class="px-4 py-3 font-medium text-right">{{ t("config_overview_drifts") }}</th>
+            <th class="px-4 py-3 font-medium">{{ t("config_compliance_last_check") }}</th>
+            <th class="px-4 py-3 font-medium"><span class="sr-only">{{ t("config_overview_actions") }}</span></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-800" data-overview-body>
+          {% for entry in overview.servers %}
+          {% set open_url = url_for('server_configuration_settings_view', servers=entry.server.id) %}
+          <tr data-overview-row data-config-compliance-server="{{ entry.server.id }}" data-href="{{ open_url }}"
+              class="config-overview-row"
+              data-name="{{ entry.server.name|lower }}" data-provider="{{ entry.server.type }}"
+              data-bucket="{{ buckets.get(entry.status, 'not_checked') }}" data-status-order="{{ status_order.get(entry.status, 9) }}"
+              data-drifts="{{ entry.drift_count if entry.status in ('non_compliant', 'outdated') else 0 }}" data-checked="{{ entry.checked_at or '' }}"
+              data-groups=",{{ entry.groups|map(attribute='id')|join(',') }},"
+              data-search="{{ (entry.server.name ~ ' ' ~ (entry.reference.name if entry.reference else '') ~ ' ' ~ (entry.groups|map(attribute='name')|join(' ')))|lower }}">
+            <td class="px-4 py-3 align-top">
+              <div class="flex flex-wrap items-center gap-2 text-slate-200">
+                <a href="{{ open_url }}" data-overview-open class="hover:underline">{{ entry.server.name }}</a>
+                {% with badge_type = entry.server.type %}{% include "server_configuration/_type_badge.html" %}{% endwith %}
+              </div>
+              {% if entry.status == "unreachable" and entry.error %}
+              <div class="mt-1 text-xs text-amber-300">{{ t(entry.error) }}</div>
+              {% elif entry.status == "conflict" %}
+              <div class="mt-1 text-xs text-slate-400">{{ t("config_compliance_conflict_help") }}
+                <a href="{{ url_for('server_configuration_profiles') }}" class="text-primary hover:underline">{{ t("config_reference_choose") }}</a></div>
+              {% elif entry.status == "outdated" %}
+              <div class="mt-1 text-xs text-slate-400">{{ t("config_compliance_outdated_help") }}</div>
+              {% elif entry.status == "partial" %}
+              <div class="mt-1 text-xs text-slate-400">{{ t("config_compliance_partial_help").format(count=entry.unverified_count) }}</div>
+              {% endif %}
+              {% if entry.exceptions %}
+              <div class="mt-1 text-[11px] text-slate-500" data-config-exceptions>{{ t("config_overview_exceptions").format(count=entry.exceptions|length) }}</div>
+              {% endif %}
+            </td>
+            <td class="px-4 py-3 align-top">
+              <span class="px-2 py-0.5 rounded-full text-xs whitespace-nowrap {{ status_styles.get(entry.status, 'bg-slate-800 text-slate-300') }}">{{ t("config_status_" ~ entry.status) }}</span>
+            </td>
+            <td class="px-4 py-3 align-top text-slate-300">{{ entry.reference.name if entry.reference else "—" }}</td>
+            <td class="px-4 py-3 align-top text-slate-400">{{ entry.groups|map(attribute='name')|join(', ') or "—" }}</td>
+            <td class="px-4 py-3 align-top text-right {% if entry.drift_count and entry.status in ('non_compliant', 'outdated') %}text-rose-300 font-semibold{% else %}text-slate-500{% endif %}">{{ entry.drift_count if entry.status in ("non_compliant", "outdated") else "—" }}</td>
+            <td class="px-4 py-3 align-top text-xs text-slate-400 whitespace-nowrap">{{ entry.checked_at|browser_datetime if entry.checked_at else "—" }}</td>
+            <td class="config-overview-actions px-4 py-3 align-top">
+              <div class="flex flex-wrap justify-end gap-2">
+                {% if mode == "manual" and entry.status == "non_compliant" %}
+                <form method="POST" action="{{ url_for('server_configuration_fix') }}">
+                  <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+                  <input type="hidden" name="server_ids" value="{{ entry.server.id }}">
+                  <button type="submit" class="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-dark text-xs text-white whitespace-nowrap">{{ t("config_fix_server") }}</button>
+                </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" class="px-4 py-6 text-sm text-slate-400">{{ t("server_config_empty_title") }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p data-overview-no-match class="hidden px-4 py-4 text-sm text-slate-400">{{ t("config_matrix_no_difference") }}</p>
+    <div class="px-4 py-3 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400"
+         data-overview-pager data-page-size="50" data-template="{{ t('config_overview_page') }}">
+      <span data-pager-info></span>
+      <div class="flex gap-2">
+        <button type="button" data-pager-prev class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200">{{ t("config_overview_previous") }}</button>
+        <button type="button" data-pager-next class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200">{{ t("config_overview_next") }}</button>
+      </div>
+    </div>
+  </section>
+
+  {% if overview.changes %}
+  <details class="bg-slate-900 rounded-xl border border-slate-800">
+    <summary class="cursor-pointer px-5 py-4 text-sm font-semibold text-slate-200">{{ t("config_compliance_changes") }}
+      <span class="text-xs font-normal text-slate-400">· {{ overview.changes|length }}</span></summary>
+    <p class="text-sm text-slate-400 px-5 pb-2">{{ t("config_compliance_changes_help") }}</p>
+    <ul class="divide-y divide-slate-800">
+      {% for change in overview.changes %}
+      <li data-config-change class="px-5 py-3 text-sm flex flex-wrap items-center justify-between gap-3">
+        <div class="text-slate-200">{{ change.server_name }} · {% if change.library %}<span class="text-slate-400">{{ change.library }} · </span>{% endif %}{{ change.label }}</div>
+        <div class="text-xs text-slate-400">{{ show(change.previous_value) }} → <span class="text-slate-200">{{ show(change.current_value) }}</span> · {{ change.detected_at|browser_datetime }}</div>
+      </li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ url_for('static', filename='js/pages/server-configuration.js', v=g.app_version|default('dev')) }}"></script>
+  {% include "partials/confirm_modal.html" %}
+{% endblock %}

@@ -1,0 +1,347 @@
+(function () {
+  function bindAttachments() {
+    const input = document.getElementById('template-attachments');
+    const list = document.getElementById('template-attachments-pending');
+    if (!input || !list) return;
+    // Keep pending files across successive selections; only submit on Save.
+    let pending = [];
+    function render() {
+      list.replaceChildren();
+      if (!pending.length) return;
+      const heading = document.createElement('p');
+      heading.textContent = list.dataset.pendingLabel;
+      heading.className = 'font-medium text-emerald-300';
+      list.appendChild(heading);
+      pending.forEach(function (file, index) {
+        const row = document.createElement('div');
+        row.className = 'flex items-center justify-between gap-2 rounded-lg border border-emerald-600/50 p-2';
+        const name = document.createElement('span');
+        name.className = 'min-w-0 break-all text-slate-200';
+        name.textContent = file.name;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'shrink-0 rounded border border-rose-500/60 px-2 py-1 text-rose-300 hover:bg-rose-950';
+        button.textContent = list.dataset.removeLabel;
+        button.setAttribute('aria-label', `${list.dataset.removeLabel} ${file.name}`);
+        button.addEventListener('click', function () {
+          pending.splice(index, 1);
+          syncFiles();
+          render();
+        });
+        row.append(name, button);
+        list.appendChild(row);
+      });
+    }
+    function syncFiles() {
+      const transfer = new DataTransfer();
+      pending.forEach(file => transfer.items.add(file));
+      input.files = transfer.files;
+    }
+    input.addEventListener('change', function () {
+      for (const file of input.files) {
+        if (!pending.some(item => item.name === file.name && item.size === file.size && item.lastModified === file.lastModified)) {
+          pending.push(file);
+        }
+      }
+      syncFiles();
+      render();
+    });
+    input.form?.addEventListener('reset', function () {
+      pending = [];
+      list.replaceChildren();
+    });
+  }
+
+  function readConfig() {
+    const node = document.getElementById("comm-templates-config");
+    if (!node) {
+      return {};
+    }
+    try {
+      return JSON.parse(node.textContent || "{}");
+    } catch (error) {
+      console.error("[vodum] communication template configuration failed");
+      return {};
+    }
+  }
+
+  function setBlockDisabled(blockElement, disabled) {
+    if (!blockElement) {
+      return;
+    }
+    blockElement.querySelectorAll("input, select, textarea, button").forEach(function (element) {
+      if (disabled) {
+        element.setAttribute("disabled", "disabled");
+      } else {
+        element.removeAttribute("disabled");
+      }
+    });
+  }
+
+  function bindTemplateForm(config) {
+    const toggle = document.getElementById("template_enabled_switch");
+    const hidden = document.getElementById("template_enabled");
+
+    if (toggle && hidden) {
+      if (config.streamBlockedEnabledLocked) {
+        hidden.value = "1";
+      } else {
+        toggle.addEventListener("change", function () {
+          hidden.value = toggle.checked ? "1" : "0";
+        });
+      }
+    }
+
+    const triggerSelect = document.getElementById("trigger_event");
+    const blockExpiration = document.getElementById("delay_block_expiration");
+    const blockUserCreation = document.getElementById("delay_block_user_creation");
+    const blockExpirationChangeDirection = document.getElementById("expiration_change_direction_block");
+    const daysOffset = document.getElementById("days_offset");
+    const directionSelect = document.getElementById("delay_direction_select");
+    const hiddenBefore = document.getElementById("days_before_hidden");
+    const hiddenAfter = document.getElementById("days_after_hidden");
+
+    function syncHiddenDelayValues() {
+      if (!daysOffset || !directionSelect || !hiddenBefore || !hiddenAfter) {
+        return;
+      }
+
+      const raw = (daysOffset.value || "").trim();
+      const parsed = raw === "" ? 0 : parseInt(raw, 10);
+      const offset = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+
+      if ((directionSelect.value || "before") === "after") {
+        hiddenBefore.value = "";
+        hiddenAfter.value = String(offset);
+      } else {
+        hiddenAfter.value = "";
+        hiddenBefore.value = String(offset);
+      }
+    }
+
+    function refreshDelayUI() {
+      const eventName = triggerSelect ? triggerSelect.value || "expiration" : "expiration";
+
+      if (eventName === "user_creation" || eventName === "pending_invite_reminder") {
+        blockExpiration?.classList.add("hidden");
+        blockUserCreation?.classList.remove("hidden");
+        blockExpirationChangeDirection?.classList.add("hidden");
+        setBlockDisabled(blockExpiration, true);
+        setBlockDisabled(blockUserCreation, false);
+        setBlockDisabled(blockExpirationChangeDirection, true);
+        return;
+      }
+
+      if (eventName === "referral_reward") {
+        blockExpiration?.classList.add("hidden");
+        blockUserCreation?.classList.add("hidden");
+        blockExpirationChangeDirection?.classList.add("hidden");
+        setBlockDisabled(blockExpiration, true);
+        setBlockDisabled(blockUserCreation, true);
+        setBlockDisabled(blockExpirationChangeDirection, true);
+        if (hiddenBefore) hiddenBefore.value = "";
+        if (hiddenAfter) hiddenAfter.value = "0";
+        return;
+      }
+
+      if (eventName === "expiration_change") {
+        blockExpiration?.classList.add("hidden");
+        blockUserCreation?.classList.add("hidden");
+        blockExpirationChangeDirection?.classList.remove("hidden");
+        setBlockDisabled(blockExpiration, true);
+        setBlockDisabled(blockUserCreation, true);
+        setBlockDisabled(blockExpirationChangeDirection, false);
+        if (hiddenBefore) hiddenBefore.value = "";
+        if (hiddenAfter) hiddenAfter.value = "0";
+        return;
+      }
+
+      blockUserCreation?.classList.add("hidden");
+      blockExpiration?.classList.remove("hidden");
+      blockExpirationChangeDirection?.classList.add("hidden");
+      setBlockDisabled(blockUserCreation, true);
+      setBlockDisabled(blockExpiration, false);
+      setBlockDisabled(blockExpirationChangeDirection, true);
+      syncHiddenDelayValues();
+    }
+
+    triggerSelect?.addEventListener("change", refreshDelayUI);
+    daysOffset?.addEventListener("input", syncHiddenDelayValues);
+    directionSelect?.addEventListener("change", syncHiddenDelayValues);
+    refreshDelayUI();
+  }
+
+  function bindHelpModals() {
+    const helpButton = document.getElementById("commVarsHelpBtn");
+    const helpModal = document.getElementById("commVarsHelpModal");
+    const helpCloseTop = document.getElementById("commVarsHelpCloseTop");
+    const helpCloseBottom = document.getElementById("commVarsHelpCloseBottom");
+    const duplicateModal = document.getElementById("duplicateDisabledModal");
+    const duplicateCloseTop = document.getElementById("duplicateDisabledCloseTop");
+    const duplicateCloseBottom = document.getElementById("duplicateDisabledCloseBottom");
+
+    function openModal(modal) {
+      if (!modal) return;
+      modal.classList.remove("hidden");
+      modal.setAttribute("aria-hidden", "false");
+    }
+
+    function closeModal(modal) {
+      if (!modal) return;
+      modal.classList.add("hidden");
+      modal.setAttribute("aria-hidden", "true");
+    }
+
+    helpButton?.addEventListener("click", function () { openModal(helpModal); });
+    helpCloseTop?.addEventListener("click", function () { closeModal(helpModal); });
+    helpCloseBottom?.addEventListener("click", function () { closeModal(helpModal); });
+    duplicateCloseTop?.addEventListener("click", function () { closeModal(duplicateModal); });
+    duplicateCloseBottom?.addEventListener("click", function () { closeModal(duplicateModal); });
+
+    helpModal?.addEventListener("click", function (event) {
+      if (event.target === helpModal || event.target.classList.contains("absolute")) {
+        closeModal(helpModal);
+      }
+    });
+
+    duplicateModal?.addEventListener("click", function (event) {
+      if (event.target === duplicateModal || event.target.classList.contains("absolute")) {
+        closeModal(duplicateModal);
+      }
+    });
+
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") {
+        closeModal(helpModal);
+        closeModal(duplicateModal);
+      }
+    });
+  }
+
+  function bindDiscordCounter() {
+    const body = document.getElementById("template_body");
+    const counter = document.getElementById("template_discord_counter");
+    const channels = body?.form?.elements.namedItem("delivery_channels");
+    if (!body || !counter || !channels) return;
+
+    const refresh = function () {
+      const includesDiscord = channels.selectedOptions[0]?.dataset.discord === "1";
+      counter.hidden = !includesDiscord;
+      if (!includesDiscord) return;
+      const count = body.value.length;
+      const parts = Math.max(1, Math.ceil(count / 1900));
+      counter.textContent = (counter.dataset.label || "{count} · Discord: {parts}")
+        .replace("{count}", String(count))
+        .replace("{parts}", String(parts));
+      counter.classList.toggle("text-amber-300", parts > 1);
+      counter.classList.toggle("text-slate-500", parts <= 1);
+    };
+
+    body.addEventListener("input", refresh);
+    channels.addEventListener("change", refresh);
+    refresh();
+  }
+
+  function bindRowLinks() {
+    document.querySelectorAll("tr[data-href]").forEach(function (row) {
+      if (row.dataset.boundRowClick === "1") {
+        return;
+      }
+      row.dataset.boundRowClick = "1";
+      row.addEventListener("click", function () {
+        window.location.href = row.dataset.href;
+      });
+      row.addEventListener("keydown", function (event) {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          window.location.href = row.dataset.href;
+        }
+      });
+    });
+  }
+
+  function bindDeleteModal() {
+    const deleteButton = document.getElementById("commTemplateDeleteBtn");
+    const modal = document.getElementById("commTemplateDeleteModal");
+    const cancelButton = document.getElementById("commTemplateDeleteCancel");
+    const confirmButton = document.getElementById("commTemplateDeleteConfirm");
+    const actionInput = document.getElementById("commTemplateFormAction");
+
+    if (!deleteButton || !modal || !cancelButton || !confirmButton || !actionInput) {
+      return;
+    }
+
+    const form = deleteButton.closest("form");
+
+    function openModal() {
+      modal.classList.remove("hidden");
+      modal.setAttribute("aria-hidden", "false");
+    }
+
+    function closeModal() {
+      modal.classList.add("hidden");
+      modal.setAttribute("aria-hidden", "true");
+    }
+
+    deleteButton.addEventListener("click", openModal);
+    cancelButton.addEventListener("click", closeModal);
+    confirmButton.addEventListener("click", function () {
+      actionInput.value = "delete";
+      form.submit();
+    });
+    modal.addEventListener("click", function (event) {
+      if (event.target === modal || event.target.classList.contains("bg-black/70")) {
+        closeModal();
+      }
+    });
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape" && !modal.classList.contains("hidden")) {
+        closeModal();
+      }
+    });
+  }
+
+  function bindTemplateTest() {
+    const button = document.getElementById("commTemplateTestBtn");
+    const status = document.getElementById("commTemplateTestStatus");
+    if (!button || !status) return;
+    const form = button.closest("form");
+    button.addEventListener("click", async function () {
+      const data = new FormData(form);
+      data.set("action", "test");
+      button.disabled = true;
+      status.textContent = button.dataset.sendingLabel || "…";
+      status.className = "self-center text-xs text-slate-400";
+      try {
+        const testUrl = button.dataset.testUrl || form.getAttribute("action");
+        const response = await fetch(testUrl, {method: "POST", body: data, headers: {Accept: "application/json"}});
+        const raw = await response.text();
+        let payload;
+        try {
+          payload = JSON.parse(raw);
+        } catch (_) {
+          payload = {ok: false, error: response.status === 403 ? (button.dataset.csrfError || "Request rejected (CSRF). Refresh the page and try again.") : `HTTP ${response.status}`};
+        }
+        status.textContent = payload.message || payload.error || `HTTP ${response.status}`;
+        status.className = `self-center text-xs ${response.ok && payload.ok ? "text-emerald-300" : "text-rose-300"}`;
+      } catch (error) {
+        console.error("[vodum] communication template test failed");
+        status.textContent = error.message || String(error);
+        status.className = "self-center text-xs text-rose-300";
+      } finally {
+        button.disabled = false;
+      }
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    bindAttachments();
+    const config = readConfig();
+    bindTemplateForm(config);
+    bindDiscordCounter();
+    bindHelpModals();
+    bindRowLinks();
+    bindDeleteModal();
+    bindTemplateTest();
+  });
+})();

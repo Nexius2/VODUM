@@ -1,0 +1,43 @@
+<section class="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+  <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h2 class="text-sm font-semibold">{{ t("operations_health") }}</h2>
+      <p class="mt-1 text-xs text-slate-500">{{ t("operations_health_help") }}</p>
+    </div>
+    <span class="rounded-full px-3 py-1 text-xs font-semibold {% if operations.level == 'critical' %}bg-rose-900/50 text-rose-200{% elif operations.level == 'warning' %}bg-amber-900/50 text-amber-200{% else %}bg-emerald-900/50 text-emerald-200{% endif %}">
+      {{ t("operations_" ~ operations.level) }}
+    </span>
+  </div>
+
+  <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+    <a href="{{ url_for('servers_list') }}" class="rounded-xl border border-slate-800 bg-slate-950/40 p-4 transition hover:border-primary/60">
+      <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("providers") }}</div>
+      <div class="mt-2 text-2xl font-bold {% if operations.servers.offline %}text-rose-400{% else %}text-emerald-400{% endif %}">{{ operations.servers.online }}/{{ operations.servers.total }}</div>
+      <div class="mt-1 text-xs text-slate-400">{{ operations.servers.offline }} {{ t("offline") }} · {{ operations.servers.stale }} {{ t("operations_stale") }}</div>
+    </a>
+    <a href="{{ url_for('tasks_page') }}" class="rounded-xl border border-slate-800 bg-slate-950/40 p-4 transition hover:border-primary/60">
+      <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("tasks") }}</div>
+      <div class="mt-2 flex gap-4"><span class="text-2xl font-bold text-blue-400">{{ operations.tasks.running }}</span><span class="text-2xl font-bold text-amber-400">{{ operations.tasks.queued }}</span><span class="text-2xl font-bold text-rose-400">{{ operations.tasks.errors }}</span></div>
+      <div class="mt-1 text-xs text-slate-400">{{ t("running") }} · {{ t("queued") }} · {{ t("in_error") }}</div>
+    </a>
+    <a href="{{ url_for('tasks_page') }}" class="rounded-xl border border-slate-800 bg-slate-950/40 p-4 transition hover:border-primary/60">
+      <div class="text-xs uppercase tracking-wide text-slate-500">{{ t("operations_media_jobs") }}</div>
+      <div class="mt-2 flex gap-4"><span class="text-2xl font-bold text-amber-400">{{ operations.jobs.queued }}</span><span class="text-2xl font-bold text-blue-400">{{ operations.jobs.running }}</span><span class="text-2xl font-bold text-rose-400">{{ operations.jobs.errors }}</span></div>
+      <div class="mt-1 text-xs text-slate-400">{{ t("queued") }} · {{ t("running") }} · {{ t("in_error") }}</div>
+    </a>
+  </div>
+
+  {% if operations.recent_errors %}
+  <div class="mt-4 border-t border-slate-800 pt-4">
+    <div class="mb-2 text-xs font-semibold text-slate-300">{{ t("operations_recent_incidents") }}</div>
+    <div class="space-y-2">
+      {% for incident in operations.recent_errors %}
+      <div class="flex min-w-0 items-start justify-between gap-4 rounded-lg bg-rose-950/20 px-3 py-2 text-xs">
+        <div class="min-w-0"><div class="font-medium text-rose-200">{{ incident.name }}</div><div class="truncate text-slate-400">{{ incident.last_error or '-' }}</div></div>
+        <span class="shrink-0 text-slate-500">{{ incident.occurred_at|browser_datetime if incident.occurred_at else '-' }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</section>

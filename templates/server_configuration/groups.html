@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% set active_page = "server_configuration" %}
+
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/server-configuration.css', v=g.app_version|default('dev')) }}">{% endblock %}
+{% block header_title %}{{ t("server_config_title") }}{% endblock %}
+{% block header_subtitle %}{{ t("config_groups_subtitle") }}{% endblock %}
+
+{% macro group_form(group=None) %}
+<form method="POST" action="{{ url_for('server_configuration_group_save') }}" class="space-y-3">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+  {% if group %}<input type="hidden" name="group_id" value="{{ group.id }}">{% endif %}
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+    <div>
+      <label class="block text-sm mb-1 text-slate-300" for="config-group-name-{{ group.id if group else 'new' }}">{{ t("config_group_name") }}</label>
+      <input id="config-group-name-{{ group.id if group else 'new' }}" type="text" name="name" required maxlength="80"
+             value="{{ group.name if group else '' }}" placeholder="{{ t('config_group_name_placeholder') }}"
+             class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+    </div>
+    <div>
+      <label class="block text-sm mb-1 text-slate-300" for="config-group-description-{{ group.id if group else 'new' }}">{{ t("config_description") }}</label>
+      <input id="config-group-description-{{ group.id if group else 'new' }}" type="text" name="description" maxlength="300"
+             value="{{ group.description if group else '' }}"
+             class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+    </div>
+  </div>
+  <fieldset>
+    <legend class="block text-sm mb-1 text-slate-300">{{ t("config_group_members") }}</legend>
+    <div class="flex flex-wrap gap-2">
+      {% for server in servers %}
+      <label class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-800 bg-slate-950 text-sm text-slate-200">
+        <input type="checkbox" name="server_ids" value="{{ server.id }}" {% if group and server.id in group.server_ids %}checked{% endif %}
+               class="w-4 h-4 rounded border-slate-600 bg-slate-800">
+        {{ server.name }}
+        {% with badge_type = server.type %}{% include "server_configuration/_type_badge.html" %}{% endwith %}
+      </label>
+      {% endfor %}
+    </div>
+  </fieldset>
+  <div class="flex justify-end">
+    <button type="submit" class="px-4 py-2 bg-primary hover:bg-primary-dark rounded text-white text-sm">{{ t("save") if group else t("config_group_create") }}</button>
+  </div>
+</form>
+{% endmacro %}
+
+{% block content %}
+<div class="space-y-6">
+  {% include "server_configuration/_nav.html" %}
+
+  <section class="bg-slate-900 p-6 rounded-xl border border-slate-800">
+    <h2 class="text-lg font-semibold text-slate-200 mb-1">{{ t("config_group_new") }}</h2>
+    <p class="text-sm text-slate-400 mb-4">{{ t("config_group_help") }}</p>
+    {{ group_form() }}
+  </section>
+
+  {% for group in groups %}
+  <section data-config-group class="bg-slate-900 p-6 rounded-xl border border-slate-800 space-y-4">
+    <div class="flex items-center justify-between gap-3">
+      <h2 class="text-lg font-semibold text-slate-200 break-all">{{ group.name }}</h2>
+      <form method="POST" action="{{ url_for('server_configuration_group_delete', group_id=group.id) }}" data-confirm="{{ t('config_group_delete_confirm') }}"
+            data-confirm-title="{{ t('config_group_delete') }}" data-confirm-label="{{ t('config_group_delete') }}">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="px-3 py-1.5 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-xs font-medium">{{ t("config_group_delete") }}</button>
+      </form>
+    </div>
+    {{ group_form(group) }}
+  </section>
+  {% else %}
+  <p class="text-sm text-slate-400">{{ t("config_group_none") }}</p>
+  {% endfor %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ url_for('static', filename='js/pages/server-configuration.js', v=g.app_version|default('dev')) }}"></script>
+  {% include "partials/confirm_modal.html" %}
+{% endblock %}

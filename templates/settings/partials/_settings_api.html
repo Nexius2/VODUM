@@ -1,0 +1,61 @@
+<div id="api-access" data-testid="api-access-card" class="bg-slate-900 p-6 rounded-xl border border-slate-800">
+  <h2 class="text-lg font-semibold text-slate-200 mb-1">{{ t("api_access") }}</h2>
+  <p class="text-sm text-slate-400 mb-6">{{ t("api_access_help") }}</p>
+
+  {# This card sits inside the main settings form: its controls belong to the
+     separate forms rendered after it (form="..."), so they never save settings. #}
+  <div class="space-y-4">
+    <div>
+      <label for="api-token-name" class="block text-sm mb-1 text-slate-300">{{ t("api_token_name") }}</label>
+      <input id="api-token-name" type="text" name="name" form="api-token-create-form" maxlength="60"
+             placeholder="{{ t('api_token_name_placeholder') }}"
+             class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+    </div>
+    <fieldset>
+      <legend class="block text-sm mb-1 text-slate-300">{{ t("api_token_scopes") }}</legend>
+      <div class="flex flex-wrap gap-x-4 gap-y-2 py-1">
+        {% for scope in api_scopes %}
+        <label class="inline-flex items-center gap-2 text-sm text-slate-200">
+          <input type="checkbox" name="scopes" value="{{ scope }}" form="api-token-create-form"
+                 {% if scope == 'stats' %}checked{% endif %}
+                 class="w-4 h-4 rounded border-slate-600 bg-slate-800">
+          {{ t("api_scope_" ~ scope) }}
+        </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+    <div class="flex justify-end">
+      <button type="submit" form="api-token-create-form"
+              class="px-4 py-2 bg-primary hover:bg-primary-dark rounded text-white text-sm">{{ t("api_token_create") }}</button>
+    </div>
+  </div>
+
+  <div class="mt-6 border-t border-slate-800 pt-4">
+    {% if api_tokens %}
+    <ul class="divide-y divide-slate-800">
+      {% for token in api_tokens %}
+      <li data-api-token-row class="flex items-center justify-between gap-3 py-3">
+        <div class="min-w-0">
+          <div class="text-sm {% if token.revoked_at %}text-slate-500{% else %}text-slate-200{% endif %} break-all">{{ token.name }}</div>
+          <div class="text-xs text-slate-400 mt-1">{% for scope in token.scopes %}{{ t("api_scope_" ~ scope) }}{% if not loop.last %}, {% endif %}{% endfor %}</div>
+          <div class="text-[11px] text-slate-500 mt-1">
+            {{ t("api_token_created_at") }} {{ token.created_at or "—" }}
+            · {{ t("api_token_last_used") }} {{ token.last_used_at or t("api_token_never_used") }}
+            · {{ t("api_token_calls") }} {{ token.use_count or 0 }}
+          </div>
+        </div>
+        {% if token.revoked_at %}
+        <span class="shrink-0 px-2 py-1 rounded-full bg-slate-800 text-slate-400 text-xs">{{ t("api_token_revoked_label") }}</span>
+        {% else %}
+        <button type="submit" form="api-token-revoke-form"
+                formaction="{{ url_for('api_token_revoke', token_id=token.id) }}"
+                class="shrink-0 px-3 py-1.5 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-xs font-medium">{{ t("api_token_revoke") }}</button>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-sm text-slate-400">{{ t("api_token_none") }}</p>
+    {% endif %}
+  </div>
+</div>

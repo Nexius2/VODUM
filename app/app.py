@@ -1,0 +1,521 @@
+from core.error_reporting import log_handled_failure
+import os
+import json
+import hmac
+import secrets
+import time
+from datetime import timedelta
+from flask import Flask, g, request, session, abort
+
+from config import Config
+from logging_utils import get_logger
+task_logger = get_logger("app")
+from db_manager import DBManager, SQLiteTiming, open_sqlite_connection, sqlite_timing
+from core.session_security import VodumSessionInterface
+from core.csrf_security import csrf_request_guard
+from core.http_security_headers import apply_security_headers
+from core.i18n import init_i18n
+from core.repair.plex_media_users_repair import run_repair_if_needed
+from core.monitoring.plex_websocket import PlexWebsocketClient
+from core.startup import StartupStep, run_startup_sequence
+from core.app_paths import update_status_path
+from core.error_reporting import (
+    install_thread_exception_logging,
+    register_flask_exception_logging,
+)
+from core.proxy_security import ConditionalProxyFix
+from core.provider_cache_timing import ProviderCacheTiming, provider_cache_timing
+from core.global_access_guard import register_global_access_guard
+from utils.version import load_app_version
+
+from api.subscriptions import subscriptions_api
+from blueprints.users import users_bp
+
+from web.helpers import get_db, table_exists, close_db
+from web.filters import inject_brand_name, safe_datetime, cron_human, tz_filter, browser_datetime, utc_iso
+from web.security import ip_in_networks
+
+
+task_logger = get_logger("tasks_ui")
+auth_logger = get_logger("auth")
+security_logger = get_logger("security")
+settings_logger = get_logger("settings")
+performance_logger = get_logger("performance")
+
+
+_I18N_CACHE: dict[str, dict] = {}
+
+def _env_bool(name: str) -> bool | None:
+    raw = os.environ.get(name)
+    if raw is None:
+        return None
+    return str(raw).strip() not in ("0", "false", "False", "no", "NO")
+
+
+def _env_int(name: str, default: int, minimum: int | None = None) -> int:
+    raw = os.environ.get(name)
+    try:
+        value = int(raw) if raw is not None and str(raw).strip() else default
+    except (TypeError, ValueError):
+        value = default
+    if minimum is not None:
+        value = max(minimum, value)
+    return value
+
+
+def _read_trust_proxy_from_db(db_path: str) -> bool:
+    conn = None
+    try:
+        conn = open_sqlite_connection(db_path, read_only=True)
+        row = conn.execute(
+            "SELECT web_trust_proxy FROM settings WHERE id = 1"
+        ).fetchone()
+
+        if not row:
+            return False
+
+        return int(row["web_trust_proxy"] or 0) == 1
+    except Exception:
+        log_handled_failure("config.read_proxy_trust")
+        return False
+    finally:
+        if conn is not None:
+            conn.close()
+
+# -----------------------------
+# AUTH RESET (local file)
+# -----------------------------
+RESET_FILE = os.environ.get("VODUM_RESET_FILE", "/appdata/password.reset")
+RESET_MAGIC = os.environ.get("VODUM_RESET_MAGIC", "RECOVER")
+
+
+def _log_ip_filter_status():
+    ip_filter_enabled = (os.environ.get("VODUM_IP_FILTER") or "1").strip() not in (
+        "0", "false", "False", "no", "NO"
+    )
+
+
+    default_allowed = "127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+    allowed = (os.environ.get("VODUM_ALLOWED_NETS") or default_allowed).strip()
+
+    if ip_filter_enabled:
+        security_logger.info("IP filter ENABLED | allowed_nets=%s", allowed)
+    else:
+        security_logger.info("IP filter DISABLED")
+
+    trusted_proxies = os.environ.get(
+        "VODUM_TRUSTED_PROXY_NETS",
+        "127.0.0.1/32,::1/128",
+    )
+    security_logger.info("Trusted proxy networks | trusted_nets=%s", trusted_proxies)
+
+
+def startup_admin_recover_if_requested(app: Flask):
+    """
+    Reset LOCAL (Unraid/Docker) :
+    - si RESET_FILE existe et contient RESET_MAGIC ("RECOVER")
+    - au démarrage de l'app uniquement
+    -> wipe admin_email + admin_password_hash
+    -> supprime le fichier (one-shot)
+    """
+    if not os.path.exists(RESET_FILE):
+        return
+
+    try:
+        with open(RESET_FILE, "r", encoding="utf-8") as f:
+            marker = (f.read() or "").strip()
+    except Exception:
+        log_handled_failure("startup.read_admin_reset_marker")
+        marker = ""
+
+    if marker != RESET_MAGIC:
+        app.logger.warning(f"password.reset detected at {RESET_FILE} but marker is invalid. Ignoring.")
+        return
+
+    try:
+        db = DBManager(os.environ.get("DATABASE_PATH", "/appdata/database.db"))
+        cur = db.execute(
+            """
+            UPDATE settings
+            SET
+              admin_email = NULL,
+              admin_password_hash = NULL,
+              admin_totp_enabled = 0,
+              admin_totp_secret = NULL,
+              auth_enabled = 1
+            WHERE id = 1
+            """
+        )
+        try:
+            cur.close()
+        except Exception as e:
+            app.logger.warning(f"Unable to close startup recovery cursor: {e}", exc_info=True)
+
+        os.remove(RESET_FILE)
+
+        app.logger.warning("Admin credentials cleared via password.reset. Please reinitialize via /setup-admin.")
+    except Exception as e:
+        app.logger.error(f"Startup admin recover failed: {e}")
+
+
+def fromjson_safe(value):
+    if value is None:
+        return None
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, str):
+        value = value.strip()
+        if not value:
+            return None
+        try:
+            return json.loads(value)
+        except Exception:
+            return None
+    return None
+
+
+APP_VERSION = load_app_version(fallback="dev")
+
+
+def _reset_maintenance_on_startup(app: Flask):
+    """
+    Si l'app a été laissée en maintenance après une restauration DB,
+    on remet un état propre au démarrage.
+
+    - maintenance_mode -> 0
+    - enabled <- enabled_prev si présent
+    - status recalculé proprement
+    - enabled_prev vidé
+    """
+    try:
+        db = DBManager(app.config["DATABASE"])
+
+        settings = db.query_one("SELECT maintenance_mode FROM settings WHERE id = 1")
+        if not settings:
+            return
+
+        if int(settings["maintenance_mode"] or 0) != 1:
+            return
+
+        # Leave maintenance mode
+        db.execute("UPDATE settings SET maintenance_mode = 0 WHERE id = 1")
+
+        # Restore tasks to their previous state
+        db.execute(
+            """
+            UPDATE tasks
+            SET
+                enabled = CASE
+                    WHEN enabled_prev IS NULL THEN enabled
+                    ELSE enabled_prev
+                END,
+                status = CASE
+                    WHEN (
+                        CASE
+                            WHEN enabled_prev IS NULL THEN enabled
+                            ELSE enabled_prev
+                        END
+                    ) = 0 THEN 'disabled'
+                    WHEN COALESCE(queued_count, 0) > 0 THEN 'queued'
+                    ELSE 'idle'
+                END,
+                enabled_prev = NULL,
+                updated_at = CURRENT_TIMESTAMP
+            """
+        )
+
+        get_logger("boot").warning(
+            "Startup restore recovery: maintenance cleared and task states restored from enabled_prev"
+        )
+
+    except Exception:
+        get_logger("boot").exception("Failed to reset maintenance mode on startup")
+
+def _run_one_shot_repair(app: Flask):
+    boot_logger = get_logger("boot")
+    with app.app_context():
+        db = get_db()
+        repair_result = run_repair_if_needed(db, app.logger)
+
+    if repair_result and repair_result.get("status") == "done":
+        boot_logger.warning(
+            "[BOOT] one-shot repair executed | key=%s | stats=%s",
+            repair_result.get("repair_key"),
+            repair_result.get("stats"),
+        )
+    elif repair_result and repair_result.get("status") == "skipped":
+        boot_logger.info(
+            "[BOOT] one-shot repair skipped | key=%s | reason=%s",
+            repair_result.get("repair_key"),
+            repair_result.get("reason"),
+        )
+    else:
+        boot_logger.info("[BOOT] one-shot repair finished with no explicit result")
+
+
+def _start_plex_websocket_engine(app: Flask):
+    db = DBManager(app.config["DATABASE"])
+    plex_servers = db.query(
+        """
+        SELECT id, name, server_identifier, type, url, local_url, public_url, token, settings_json, server_version, unavailable_since, cooldown_until, last_failure, last_checked, status FROM servers
+        WHERE LOWER(TRIM(type)) = 'plex'
+          AND token IS NOT NULL
+          AND TRIM(token) != ''
+        """
+    )
+
+    for server_row in plex_servers or []:
+        server = dict(server_row)
+        try:
+            PlexWebsocketClient(server).start()
+        except Exception:
+            task_logger.exception(
+                "Unable to start Plex websocket for %s",
+                server.get("name"),
+            )
+
+
+def _run_application_startup(app: Flask):
+    """Declare the complete post-registration startup order in one place."""
+    run_startup_sequence(
+        app,
+        (
+            StartupStep("admin_recovery", startup_admin_recover_if_requested),
+            StartupStep("maintenance_recovery", _reset_maintenance_on_startup),
+            StartupStep("one_shot_repair", _run_one_shot_repair),
+            StartupStep("plex_websocket_engine", _start_plex_websocket_engine, fatal=False),
+        ),
+    )
+
+def _resolve_asset_dir(start_dir: str, target: str) -> str:
+    """
+    Find a folder named `target` by looking in start_dir, then its parent.
+    Works whether the repo is copied as /app/* or /app/app/* etc.
+    """
+    candidates = [
+        os.path.join(start_dir, target),
+        os.path.join(os.path.dirname(start_dir), target),
+    ]
+    for c in candidates:
+        if os.path.isdir(c):
+            return c
+    # fallback: relative name (Flask may resolve it)
+    return target
+
+def create_app():
+    # Ensure templates/static/translations are loaded correctly regardless of whether the code is mounted as
+    # /app/app.py or /app/app/app.py (Docker COPY layouts vary).
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+
+    template_dir = _resolve_asset_dir(base_dir, "templates")
+    static_dir = _resolve_asset_dir(base_dir, "static")
+    lang_dir = _resolve_asset_dir(base_dir, os.path.join("translations", "ui"))
+
+    app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
+    register_flask_exception_logging(app, get_logger("requests"), register_action_hook=False)
+    install_thread_exception_logging(get_logger("threads"))
+
+    # Include authentication and other before-request hooks in the measurement.
+    # Slow requests are useful diagnostics even when debug mode is disabled.
+    route_timing_enabled = _env_bool("VODUM_ROUTE_TIMING") is not False
+    route_timing_threshold_ms = _env_int("VODUM_ROUTE_TIMING_THRESHOLD_MS", 300, minimum=0)
+    sqlite_timing_enabled = _env_bool("VODUM_SQLITE_TIMING") is True
+    provider_cache_timing_enabled = _env_bool("VODUM_PROVIDER_CACHE_TIMING") is True
+
+    @app.before_request
+    def start_route_timing():
+        if route_timing_enabled:
+            request.environ["vodum.route_started_at"] = time.perf_counter()
+            if sqlite_timing_enabled:
+                request.environ["vodum.sqlite_timing_token"] = sqlite_timing.set(SQLiteTiming())
+            if provider_cache_timing_enabled:
+                request.environ["vodum.provider_cache_timing_token"] = provider_cache_timing.set(ProviderCacheTiming())
+
+    @app.teardown_request
+    def stop_route_timing(_error):
+        token = request.environ.pop("vodum.sqlite_timing_token", None)
+        if token is not None:
+            sqlite_timing.reset(token)
+        token = request.environ.pop("vodum.provider_cache_timing_token", None)
+        if token is not None:
+            provider_cache_timing.reset(token)
+
+    @app.get("/health")
+    def health():
+        """Container and reverse-proxy readiness probe."""
+        return {"status": "ok"}
+
+    def _get_csrf_token() -> str:
+        token = session.get("_csrf_token")
+        if not token:
+            token = secrets.token_urlsafe(32)
+            session["_csrf_token"] = token
+        return token
+
+    @app.context_processor
+    def inject_csrf_token():
+        return {"csrf_token": _get_csrf_token()}
+
+    @app.before_request
+    def csrf_guard():
+        return csrf_request_guard()
+
+    # Trust proxy :
+    # - priorité à la variable d'environnement si elle existe
+    # - sinon fallback sur la valeur stockée en base/settings
+    env_trust_proxy = _env_bool("VODUM_TRUST_PROXY")
+    db_path = os.environ.get("DATABASE_PATH", "/appdata/database.db")
+
+    if env_trust_proxy is None:
+        initial_trust_proxy = _read_trust_proxy_from_db(db_path)
+    else:
+        initial_trust_proxy = env_trust_proxy
+
+    app.config["TRUST_PROXY_ENABLED"] = bool(initial_trust_proxy)
+    app.config["TRUSTED_PROXY_NETS"] = os.environ.get(
+        "VODUM_TRUSTED_PROXY_NETS",
+        "127.0.0.1/32,::1/128",
+    )
+
+    # Middleware conditionnel : lit app.config à chaque requête
+    app.wsgi_app = ConditionalProxyFix(
+        app.wsgi_app,
+        lambda: bool(app.config.get("TRUST_PROXY_ENABLED", False)),
+        lambda: str(app.config.get("TRUSTED_PROXY_NETS", "")),
+    )
+
+    # Absolute path to translations/ui. app/core/i18n.py can still read an external legacy lang/ fallback.
+    app.config["LANG_DIR"] = lang_dir
+
+    # Filters / globals
+    app.jinja_env.filters["fromjson"] = fromjson_safe
+
+    @app.before_request
+    def inject_version():
+        g.app_version = APP_VERSION
+
+        from core.update_badge import read_update_badge
+        g.update_available, g.update_pending_days = read_update_badge(update_status_path(), APP_VERSION)
+
+    app.config.from_object(Config)
+    app.session_interface = VodumSessionInterface()
+    static_max_age = _env_int("VODUM_STATIC_MAX_AGE_SECONDS", 60 * 60 * 24 * 30, minimum=0)
+    app.config["SEND_FILE_MAX_AGE_DEFAULT"] = timedelta(seconds=max(0, static_max_age))
+
+    # Ne pas écraser la valeur déjà calculée depuis env / DB
+    app.config.setdefault("TRUST_PROXY_ENABLED", False)
+
+    # Backup dir
+    app.config.setdefault("BACKUP_DIR", os.environ.get("VODUM_BACKUP_DIR", "/appdata/backups"))
+
+    @app.before_request
+    def limit_portal_request_size():
+        if (request.path.startswith("/portal") or request.path.startswith("/api/portal/")) and (request.content_length or 0) > 64 * 1024:
+            abort(413)
+
+    @app.after_request
+    def log_slow_route(response):
+        started_at = request.environ.get("vodum.route_started_at")
+        if started_at is None:
+            return response
+
+        duration_ms = int((time.perf_counter() - started_at) * 1000)
+        response.headers.add("Server-Timing", f"app;dur={duration_ms}")
+        queue_wait_us = request.environ.get("vodum.waitress_queue_wait_us")
+        if queue_wait_us is not None:
+            response.headers.add("Server-Timing", f"waitress;dur={queue_wait_us / 1000:.3f}")
+        slow_route = duration_ms >= route_timing_threshold_ms
+        slow_queue = queue_wait_us is not None and queue_wait_us >= route_timing_threshold_ms * 1000
+        if (slow_route or slow_queue) and request.endpoint != "static":
+            method = request.method
+            if method not in {"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}:
+                method = "OTHER"
+            timing = sqlite_timing.get() if sqlite_timing_enabled else None
+            sqlite_fields = ""
+            if timing is not None:
+                sqlite_fields = (
+                    f" | db_lock_wait_us={timing.lock_wait_ns // 1000}"
+                    f" | db_sql_us={timing.sql_ns // 1000}"
+                    f" | db_sql_calls={timing.sql_calls}"
+                )
+            queue_field = "" if queue_wait_us is None else f" | waitress_queue_wait_us={queue_wait_us}"
+            external_timing = provider_cache_timing.get() if provider_cache_timing_enabled else None
+            external_fields = ""
+            if external_timing is not None:
+                external_fields = (
+                    f" | provider_us={external_timing.provider_ns // 1000}"
+                    f" | provider_calls={external_timing.provider_calls}"
+                    f" | aggregate_cache_us={external_timing.cache_ns // 1000}"
+                    f" | aggregate_cache_hits={external_timing.cache_hits}"
+                    f" | aggregate_cache_misses={external_timing.cache_misses}"
+                )
+            performance_logger.info(
+                "route_timing | duration_ms=%s | status=%s | method=%s | endpoint=%s | htmx=%s%s%s%s%s",
+                duration_ms,
+                response.status_code,
+                method,
+                request.endpoint or "-",
+                "1" if request.headers.get("HX-Request") else "0",
+                sqlite_fields,
+                queue_field,
+                external_fields,
+                f" | view={request.environ['vodum.route_view']}" if "vodum.route_view" in request.environ else "",
+            )
+        return response
+
+    gzip_enabled = _env_bool("VODUM_HTTP_GZIP") is not False
+    gzip_min_size = _env_int("VODUM_HTTP_GZIP_MIN_BYTES", 1024, minimum=0)
+    gzip_level = min(9, _env_int("VODUM_HTTP_GZIP_LEVEL", 6, minimum=1))
+    from core.http_compression import compress_text_response
+
+    @app.after_request
+    def add_security_headers(response):
+        return apply_security_headers(response)
+
+    @app.after_request
+    def gzip_text_response(response):
+        return compress_text_response(response, enabled=gzip_enabled,
+                                      min_size=gzip_min_size, level=gzip_level)
+
+    # i18n (requires DB access)
+    init_i18n(app, get_db)
+
+    # Context processor + template filters
+    app.context_processor(inject_brand_name)
+    app.template_filter("safe_datetime")(safe_datetime)
+    app.template_filter("cron_human")(cron_human)
+    app.template_filter("tz")(tz_filter)
+    app.template_filter("browser_datetime")(browser_datetime)
+    app.template_filter("utc_iso")(utc_iso)
+
+    # DB teardown
+    app.teardown_appcontext(close_db)
+
+    # Blueprints
+    app.register_blueprint(subscriptions_api)
+    app.register_blueprint(users_bp)
+
+    # Global access control must not depend on any feature route module.
+    register_global_access_guard(app)
+
+    # Routes
+    from routes import register_routes
+    register_routes(app)
+
+    # Flask runs response hooks in reverse registration order. Inspect JSON
+    # outcomes before compression changes the response body.
+    app.after_request(app.extensions["vodum_action_logger"])
+
+    # Expose helpers pour d’éventuels scripts internes
+    app.get_db = get_db
+    app.table_exists = table_exists
+    app.scheduler_db_provider = lambda: DBManager(app.config["DATABASE"])
+
+    _run_application_startup(app)
+
+    return app
+
+
+
+
+

@@ -1,0 +1,59 @@
+.portal-request-toast {
+  position: fixed; top: 8rem; left: 50%; transform: translateX(-50%);
+  z-index: 100; width: max-content; max-width: calc(100vw - 2rem);
+  display: flex; align-items: center; gap: 1rem; padding: 1rem 1.25rem;
+  border: 1px solid; border-radius: 1rem; background: #0f172a;
+  box-shadow: 0 12px 36px #0008; font-size: .9rem;
+}
+.portal-request-toast[data-tone="success"] { border-color: #10b981; background: #064e3b; color: #d1fae5; }
+.portal-request-toast[data-tone="info"] { border-color: #6366f1; background: #312e81; color: #e0e7ff; }
+.portal-request-toast[data-tone="error"] { border-color: #fb7185; background: #881337; color: #ffe4e6; }
+.portal-request-toast button { flex-shrink: 0; font-size: 1.5rem; line-height: 1; padding: .25rem; }
+.portal-request-toast button:focus-visible { outline: 2px solid currentColor; border-radius: .25rem; }
+.portal-requests-scene { position: relative; isolation: isolate; min-height: 65vh; }
+.portal-requests-backdrop { position: absolute; inset: -1rem -1rem 0; z-index: -1; overflow: hidden; pointer-events: none; display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; opacity: .13; mask-image: linear-gradient(to bottom, transparent, #000 12%, #000 55%, transparent 95%); }
+.portal-requests-backdrop img { width: 100%; height: 100%; max-height: 26rem; object-fit: cover; border-radius: 1rem; filter: saturate(.65); }
+.portal-requests-backdrop img:nth-child(even) { transform: translateY(2rem); }
+.portal-requests-content { position: relative; }
+@media (max-width: 640px) {
+  .portal-requests-backdrop {
+    --poster-fade: linear-gradient(to bottom, transparent, #0005 15%, #000 40%, #000 70%, transparent);
+    inset-block-end: auto;
+    height: 31rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: 14rem;
+    gap: .625rem;
+    opacity: .34;
+    -webkit-mask-image: var(--poster-fade);
+    mask-image: var(--poster-fade);
+  }
+  .portal-requests-backdrop img { filter: saturate(.92); }
+  .portal-requests-backdrop img:nth-child(n+5) { display: none; }
+}
+
+.portal-request-progress { display: flex; align-items: center; gap: .65rem; width: 100%; color: #94a3b8; font-size: .85rem; }
+.portal-request-progress[hidden], [data-search-results][hidden] { display: none; }
+.portal-request-spinner { flex: 0 0 auto; width: 1rem; height: 1rem; border: 2px solid #334155; border-top-color: #a5b4fc; border-radius: 50%; animation: portal-request-spin 1s linear infinite; }
+.portal-request-scan { display: block; position: relative; height: 1.4em; overflow: hidden; margin-top: .3rem; color: #a5b4fc; }
+.portal-request-scan > span { display: block; animation: portal-request-scan 6s ease-in-out infinite; }
+@keyframes portal-request-spin { to { transform: rotate(360deg); } }
+@keyframes portal-request-scan { 0%, 40% { transform: translateY(0); } 50%, 90% { transform: translateY(-100%); } 100% { transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .portal-request-spinner, .portal-request-scan > span { animation: none; } }
+
+.portal-request-dialog { width: min(28rem, calc(100vw - 2rem)); margin: auto; padding: 1.75rem; border: 1px solid #334155; border-radius: 1.25rem; background: #0f172a; color: #e2e8f0; box-shadow: 0 24px 80px #0008; }
+.portal-request-dialog::backdrop { background: rgb(2 6 23 / .75); }
+.portal-request-dialog h2 { margin: 0 0 1rem; }
+.portal-request-dialog .portal-request-progress { align-items: flex-start; line-height: 1.6; }
+.portal-request-dialog .portal-request-spinner { width: 1.4rem; height: 1.4rem; margin-top: .2rem; }
+
+.portal-request-badge { display: inline-block; margin-left: .35rem; border-radius: 9999px; padding: .125rem .6rem; font-size: .75rem; font-weight: 500; border: 1px solid #334155; background: #1e293b; color: #cbd5e1; }
+.portal-request-badge[data-state="available"] { border-color: #10b981; background: #064e3b; color: #d1fae5; }
+.portal-request-badge[data-state="partial"] { border-color: #f59e0b; background: #78350f; color: #fef3c7; }
+.portal-request-badge[data-state="pending"], .portal-request-badge[data-state="pending_approval"], .portal-request-badge[data-state="approved"] { border-color: #6366f1; background: #312e81; color: #e0e7ff; }
+.portal-request-badge[data-state="declined"], .portal-request-badge[data-state="failed"], .portal-request-badge[data-state="removed"] { border-color: #fb7185; background: #881337; color: #ffe4e6; }
+.portal-request-badge[data-state="unaired"] { border-color: #475569; background: #0f172a; color: #94a3b8; }
+.portal-request-seasons { max-height: 50vh; overflow-y: auto; }
+.portal-request-seasons label { display: flex; align-items: center; gap: .6rem; padding: .35rem .5rem; border-radius: .5rem; }
+.portal-request-seasons label:hover { background: #1e293b; }
+.portal-request-seasons label[data-disabled] { color: #64748b; }
+.portal-request-seasons .portal-request-badge { margin-left: auto; }

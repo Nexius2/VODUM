@@ -1,0 +1,48 @@
+{
+  "language_name": "English",
+  "common": {
+    "none": "None"
+  },
+  "policy": {
+    "warn_title_expired": "Subscription expired",
+    "subscription_expired": "Your subscription has ended. Please renew to restore access.",
+    "max_streams_per_user": "Your subscription allows {limit} simultaneous stream(s). VODUM detected {value} stream(s).",
+    "max_ips_per_user": "Too many different IP addresses are using your account.",
+    "max_streams_per_ip": "Too many simultaneous stream(s) are using the same IP address ({ip}).",
+    "max_streams_per_server": "The server stream limit has been reached.",
+    "max_transcodes": "Too many transcoded streams are active.",
+    "max_bitrate": "One stream is above the allowed bitrate limit.",
+    "ban_4k_transcode": "4K transcoding is not allowed.",
+    "unknown": "A playback policy was violated: {rule_type}.",
+    "limit_label_max_ips_per_user": "Maximum IP addresses per user",
+    "limit_label_max_streams_per_user": "Maximum streams per user",
+    "limit_label_max_streams_per_ip": "Maximum streams per IP address",
+    "limit_label_max_streams_per_server": "Maximum streams per server",
+    "limit_label_max_transcodes": "Maximum transcoded streams",
+    "limit_label_max_bitrate": "Maximum bitrate",
+    "limit_label_ban_4k_transcode": "4K transcode blocked",
+    "limit_label_unknown": "Policy limit"
+  },
+  "portal": {
+    "invitation": {"subject": "Your {brand_name} portal invitation", "body": "Hello {username},\n\nActivate your account using this single-use link within 7 days:\n{url}"},
+    "password_reset": {"subject": "Reset your {brand_name} portal password", "body": "Use this single-use link within one hour:\n{url}"},
+    "authentication_changed": {"subject": "Your {brand_name} authentication was reset", "body": "Hello {username},\n\nAn administrator reset your portal login methods. A new invitation is required.\n\n{portal_login_url}"},
+    "suspended": {"subject": "Your {brand_name} portal access was suspended", "body": "Hello {username},\n\nYour portal access has been suspended. Contact support if needed."},
+    "reactivated": {"subject": "Your {brand_name} portal access was reactivated", "body": "Hello {username},\n\nYour portal access has been reactivated.\n\n{portal_login_url}"},
+    "new_login": {"subject": "New login to your {brand_name} portal", "body": "Hello {username},\n\nA new login to your portal account was recorded. Reset your password if this was not you.\n\n{portal_login_url}"},
+    "direct_message": {"subject": "New message in your {brand_name} portal", "body": "Hello {username},\n\nYou received a new message from an administrator. Sign in to your portal to read it.\n\n{portal_login_url}"}
+  },
+  "activation": {"button": "Activate your access", "instructions": "For your first visit, start with the button below. On Plex, create an account or sign in using the email address that received this message, then return to the activation page. Wait until all servers are ready. If an invitation is pending, accept it in Plex and return to check your access. The portal sign-in link is for later visits."},
+  "default_templates": {
+    "copy_suffix": "Default",
+    "stream_blocked": {"name": "Stream blocked", "subject": "Playback blocked", "body": "Hello {firstusername},\n\nYour playback has been stopped by {brand_name}.\n\n{policy_explanation}\n\nPolicy: {policy_rule_type}\nLimit: {policy_limit} ({policy_limit_label})\nObserved: {policy_observed}\n\nStopped playback:\n{stream_killed}\n\nActive streams involved ({active_streams_count}):\n{active_streams}\n\nPublic IPs detected ({active_ips_count}):\n{active_ips}\n\nDevices detected ({active_devices_count}):\n{active_devices}\n\nTime: {blocked_at}\n\nIf you think this is a mistake, please contact the administrator.\n\nBest regards,\n{brand_name}\n"},
+    "default_expiration_date_change": {"name": "Expiration date change", "subject": "Your subscription date has been updated", "body": "Hello {username},\n\nYour subscription expiration date has been updated.\n\nPrevious expiration date: {old_expiration_date}\nNew expiration date: {new_expiration_date}\nChange: {expiration_change_signed_days} day(s)\nReason: {expiration_change_reason}\n\nBest regards,\n{brand_name}\n"},
+    "default_fin": {"name": "Expired subscription", "subject": "Your subscription has expired", "body": "Hello {username},\n\nYour subscription expired on {expiration_date}.\nYour access may now be suspended.\n\nIf you wish to continue using the service, please renew your subscription.\n\nBest regards,\n{brand_name}\n"},
+    "default_pending_invite_reminder": {"name": "Pending invite reminder", "subject": "Reminder - please accept your invitation", "body": "Hello {username},\n\nYour invitation is still waiting for acceptance.\n\nTo start using your account:\n- Open Plex or Jellyfin\n- Sign in with your account\n- Accept the library share invitation if prompted\n\nYour subscription expiration is currently set to: {expiration_date}\n\nBest regards,\n{brand_name}\n"},
+    "default_preavis": {"name": "Expiration notice", "subject": "Your subscription will expire in {days_left} days", "body": "Hello {username},\n\nYour subscription will expire in {days_left} days.\n\nExpiration date: {expiration_date}\n\nPlease renew it to avoid any service interruption.\n\nBest regards,\n{brand_name}\n"},
+    "default_parrainage": {"name": "Referral reward", "subject": "Referral reward granted", "body": "Hello {username},\n\nGood news: you earned {referral_reward_days} bonus day(s) thanks to {referred_username}.\n\nPrevious expiration date: {referrer_old_expiration_date}\nNew expiration date: {referrer_new_expiration_date}\n\nThank you for your referral.\n\nBest regards,\n{brand_name}\n"},
+    "default_relance": {"name": "Expiration reminder", "subject": "Reminder - your subscription will expire soon", "body": "Hello {username},\n\nThis is a friendly reminder that your subscription will expire in {days_left} days.\n\nExpiration date: {expiration_date}\n\nPlease renew it in time to avoid any service interruption.\n\nBest regards,\n{brand_name}\n"},
+    "default_user_creation": {"name": "User creation", "subject": "Welcome - your account is ready", "body": "Hello {username},\n\nYour {provider_name} account has been created successfully.\n\nServer: {server_name}\nAddress: {server_url}\nLogin: {login_username}\n\nJellyfin only (not used for Plex):\nJellyfin username: {jellyfin_username}\nJellyfin password: {jellyfin_password}\n\nGet the official player:\n{player_download_url}\n\nConfiguration help:\n{player_help_url}\n\nSign in and accept the library share invitation if prompted.\n\nSubscription expiration date: {expiration_date}\n\nBest regards,\n{brand_name}\n"},
+    "usage_risk_upgrade_suggestion": {"name": "Usage risk upgrade suggestion", "subject": "A more suitable subscription may be available", "body": "Hello {username},\n\nWe noticed that your usage regularly reaches the limits of your current subscription.\n\nCurrent subscription: {current_subscription}\nSuggested subscription: {suggested_subscription}\n\nThis is only a recommendation to improve your experience and avoid blocked playback.\n\nBest regards,\n{brand_name}\n"}
+  }
+}

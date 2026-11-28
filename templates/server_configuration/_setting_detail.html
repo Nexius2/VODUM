@@ -1,0 +1,164 @@
+{% macro show(value) -%}
+{%- if value is none -%}—{%- elif value == "true" -%}{{ t("yes") }}{%- elif value == "false" -%}{{ t("no") }}{%- elif value == "" -%}∅{%- else -%}{{ value }}{%- endif -%}
+{%- endmacro %}
+<div class="config-drawer-inner" data-setting-detail data-label-yes="{{ t('yes') }}" data-label-no="{{ t('no') }}">
+  <div class="flex items-start justify-between gap-3 px-5 py-4 border-b border-slate-800">
+    <div>
+      {% if row %}
+      <h2 class="text-base font-semibold text-slate-100">{% if row.library %}<span class="text-slate-400">{{ row.library }} · </span>{% endif %}{{ row.label }}</h2>
+      <p class="text-[11px] text-slate-500 mt-0.5">{{ t("server_config_cat_" ~ row.category) }} · <code>{{ row.key }}</code></p>
+      {% else %}
+      <h2 class="text-base font-semibold text-slate-100">{{ t("config_settings_detail") }}</h2>
+      {% endif %}
+    </div>
+    <button type="button" data-drawer-close class="px-2 py-1 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800" aria-label="{{ t('close') }}">×</button>
+  </div>
+
+  {% if not row %}
+  <p class="px-5 py-6 text-sm text-slate-400">{{ t("config_settings_detail_missing") }}</p>
+  {% else %}
+  {% set single = row.servers == 1 %}
+  {% set can_edit = mode == "manual" and row.editable %}
+  <div class="config-drawer-body px-5 py-4 space-y-5">
+    {% if row.summary %}<p class="text-sm text-slate-400">{{ row.summary }}</p>{% endif %}
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+      {% if row.recommended %}
+      <div class="rounded-lg border border-slate-800 bg-slate-950 p-3" data-detail-recommended>
+        {% if row.recommended.kind == "recommended" %}
+        <div class="text-xs text-slate-500">{{ t("config_matrix_recommended") }}</div>
+        <div class="text-emerald-300 font-semibold">{{ show(row.recommended.display) }}</div>
+        <p class="mt-1 text-xs text-slate-400">{{ t(row.recommended.reason) }}
+          <a href="{{ row.recommended.source }}" target="_blank" rel="noopener noreferrer" class="text-sky-300 hover:underline">{{ t("config_matrix_recommendation_source") }}</a></p>
+        {% else %}
+        <div class="text-xs text-slate-500">{{ t("config_settings_platform_default") }}</div>
+        <div class="text-slate-300">{{ show(row.recommended.display) }}</div>
+        {% endif %}
+      </div>
+      {% endif %}
+      {% if row.expected_display is not none %}
+      <div class="rounded-lg border border-slate-800 bg-slate-950 p-3">
+        <div class="text-xs text-slate-500">{{ t("config_matrix_expected") }}</div>
+        <div class="text-slate-200 font-semibold">{{ show(row.expected_display) }}</div>
+        {% if row.off_profile %}<p class="mt-1 text-xs text-rose-300">{{ t("config_settings_flag_off_profile").format(count=row.off_profile) }}</p>{% endif %}
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="space-y-3" data-detail-groups>
+      <h3 class="text-xs uppercase tracking-wide text-slate-500">{{ t("config_settings_values_title") if not single else t("config_settings_value_title") }}</h3>
+      {% for group in row.groups %}
+      {% set hidden_servers = group.servers|selectattr("hidden_by")|list %}
+      {% set group_editable = group.value is not none or hidden_servers %}
+      <div class="rounded-lg border border-slate-800" data-detail-group>
+        {% set selectable = (group.servers|selectattr("editable")|list) if group.value is not none else (hidden_servers|selectattr("editable")|list) %}
+        <div class="flex items-center justify-between gap-2 px-3 py-2 bg-slate-950">
+          <span class="text-sm font-semibold {% if group.value is none %}text-slate-400{% else %}text-slate-100{% endif %}">{{ show(group.display) if group.value is not none else t("config_settings_absent") }}</span>
+          <span class="flex items-center gap-3 text-xs text-slate-400">
+            {% if group.servers|length > 1 %}<span>{{ t("config_settings_chip_servers").format(count=group.servers|length) }}</span>{% endif %}
+            {% if can_edit and selectable|length > 1 %}<button type="button" data-select-group class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200">{{ t("config_settings_pick_all") }}</button>{% endif %}
+          </span>
+        </div>
+        {% if hidden_servers %}
+        {% set hidden = hidden_servers[0].hidden_by %}
+        <p class="px-3 py-2 text-xs text-amber-200 border-b border-slate-800" data-detail-hidden-by>
+          {{ t("config_settings_hidden_by").format(parent=hidden.parent_label, current=hidden.current) }}
+          {% if can_edit and selectable %}{{ t("config_settings_hidden_by_fix").format(parent=hidden.parent_label, value=hidden.enable_display) }}{% endif %}
+        </p>
+        {% endif %}
+        {% if group.value is none and hidden_servers|length < group.servers|length %}
+        <p class="px-3 py-2 text-xs text-slate-400 border-b border-slate-800" data-detail-absent>
+          {{ t("config_settings_absent_library_help") if row.library else t("config_settings_absent_help") }}</p>
+        {% endif %}
+        <ul class="divide-y divide-slate-800 config-detail-servers {% if group.servers|length > 12 %}is-collapsed{% endif %}" data-detail-servers>
+          {% for server in group.servers %}
+          <li class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm" data-detail-server
+              data-off-profile="{{ 1 if server.off_profile else 0 }}" data-off-recommendation="{{ 1 if server.off_recommendation else 0 }}">
+            <label class="flex items-center gap-2 text-slate-200 {% if can_edit and server.editable and (group.value is not none or server.hidden_by) %}cursor-pointer{% endif %}">
+              {% if can_edit and server.editable and (group.value is not none or server.hidden_by) %}
+              <input type="checkbox" data-edit-target value="{{ server.id }}" data-key="{{ server.key }}"{% if group.value is not none %} data-current="{{ group.value }}"{% endif %}
+                     class="w-4 h-4 rounded border-slate-600 bg-slate-800" {% if single %}checked{% endif %}>
+              {% endif %}
+              {{ server.name }}
+            </label>
+            <span class="flex flex-wrap items-center gap-1.5 text-xs">
+              {% if server.off_profile %}<span class="px-2 py-0.5 rounded-full bg-rose-900/40 text-rose-300">{{ t("config_settings_off_profile_one") }} · {{ show(server.expected_display) }}</span>{% endif %}
+              {% if server.off_recommendation %}<span class="px-2 py-0.5 rounded-full bg-sky-950/30 text-sky-300">{{ t("config_matrix_off_recommendation") }}</span>{% endif %}
+              {% if server.off_profile %}
+              <form method="POST" action="{{ url_for('server_configuration_exception') }}" class="inline-flex">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="server_id" value="{{ server.id }}">
+                <input type="hidden" name="key" value="{{ server.key }}">
+                <input type="hidden" name="label" value="{{ (row.library ~ ' · ' if row.library else '') ~ row.label }}">
+                <input type="hidden" name="enabled" value="1">
+                <input type="hidden" name="next" value="{{ back }}">
+                <button type="submit" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300"
+                        title="{{ t('config_exception_help') }}">{{ t("config_exception_add") }}</button>
+              </form>
+              {% endif %}
+              {% if server.exception %}
+              <span class="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300" title="{{ t('config_exception_help') }}">{{ t("config_exception_badge") }}</span>
+              <form method="POST" action="{{ url_for('server_configuration_exception') }}" class="inline-flex" data-exception-remove>
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="server_id" value="{{ server.id }}">
+                <input type="hidden" name="key" value="{{ server.key }}">
+                <input type="hidden" name="enabled" value="0">
+                <input type="hidden" name="next" value="{{ back }}">
+                <button type="submit" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300"
+                        title="{{ t('config_exception_remove_help') }}">{{ t("config_exception_remove") }}</button>
+              </form>
+              {% endif %}
+            </span>
+          </li>
+          {% endfor %}
+        </ul>
+        {% if group.servers|length > 12 %}
+        <button type="button" data-detail-expand class="w-full px-3 py-2 text-xs text-primary hover:underline border-t border-slate-800">{{ t("config_settings_show_all").format(count=group.servers|length) }}</button>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="config-drawer-footer px-5 py-4 border-t border-slate-800 space-y-3">
+    {% if mode != "manual" %}
+    <p class="text-xs text-slate-400" data-detail-locked>{{ t("config_settings_edit_monitoring") }}</p>
+    {% elif not row.editable %}
+    <p class="text-xs text-slate-400">{{ t("config_settings_not_editable") }}</p>
+    {% else %}
+    <form method="POST" action="{{ url_for('server_configuration_settings_edit') }}" data-detail-edit class="space-y-3"
+          data-type="{{ row.editable.type }}" data-choices="{{ row.editable.choices|tojson|forceescape }}"
+          data-recommended="{{ row.recommended.value if row.recommended and row.recommended.kind == 'recommended' else '' }}"
+          data-count-template="{{ t('config_settings_selected') }}"
+          data-max="{{ max_servers }}" data-max-template="{{ t('config_settings_too_many') }}"
+          data-same-template="{{ t('config_settings_already_set') }}">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="edits" value="" data-detail-edits>
+      <input type="hidden" name="next" value="{{ back }}">
+      {% if not single %}
+      <div class="config-select-row flex flex-wrap gap-2 text-xs">
+        {% if row.off_profile %}<button type="button" data-select="off_profile" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200">{{ t("config_settings_select_off_profile") }}</button>{% endif %}
+        {% if row.off_recommendation %}<button type="button" data-select="off_recommendation" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200">{{ t("config_settings_select_off_recommendation") }}</button>{% endif %}
+        <button type="button" data-select="all" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200">{{ t("config_settings_pick_all") }}</button>
+        <button type="button" data-select="none" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200">{{ t("config_settings_pick_none") }}</button>
+      </div>
+      {% endif %}
+      <div class="flex flex-wrap items-end gap-2">
+        <div class="flex-1 min-w-[12rem]">
+          <label for="detail-value" class="block text-xs mb-1 text-slate-400">{{ t("config_settings_new_value") }}</label>
+          <div data-detail-control></div>
+        </div>
+        {% if row.recommended and row.recommended.kind == "recommended" %}
+        <button type="button" data-use-recommended class="px-3 py-2 rounded-lg border border-emerald-800/60 text-xs text-emerald-300 hover:bg-slate-800">{{ t("config_settings_use_recommended") }}</button>
+        {% endif %}
+      </div>
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <span class="text-xs text-slate-400" data-detail-count></span>
+        <button type="submit" class="px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-sm text-white" data-loading-label="{{ t('config_compare_loading') }}">{{ t("config_edit_preview") }}</button>
+      </div>
+      <p class="text-[11px] text-slate-500">{{ t("config_edit_preview_hint") }}</p>
+    </form>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>

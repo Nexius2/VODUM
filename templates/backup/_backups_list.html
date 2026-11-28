@@ -1,0 +1,178 @@
+﻿<form action="{{ url_for('backup_action') }}" method="post" id="restore-existing-form">
+  <input type="hidden" name="action" value="restore">
+  <input type="hidden" name="selected_backup" id="selected-backup-input">
+
+  <h2 class="text-sm font-semibold mb-4">
+    {{ t("available_backups") }}
+  </h2>
+
+  {% if not backups %}
+    <p class="text-xs text-slate-500">{{ t("no_backups") }}</p>
+  {% else %}
+    <div class="overflow-visible">
+      <table class="w-full text-xs overflow-visible">
+        <thead class="bg-slate-950/60 text-slate-400">
+          <tr>
+            <th class="px-3 py-2 text-left">{{ t("name") }}</th>
+            <th class="px-3 py-2 text-left">{{ t("size") }}</th>
+            <th class="px-3 py-2 text-left">{{ t("modified_at") }}</th>
+            <th class="px-3 py-2 text-center w-24">{{ t("actions") }}</th>
+          </tr>
+        </thead>
+
+        <tbody id="backups-table-body" class="overflow-visible">
+          {% for b in backups %}
+          <tr class="border-t border-slate-800 overflow-visible">
+			<td class="px-3 py-2 font-mono text-[11px]">
+			  <a
+				href="{{ url_for('download_backup', filename=b.name) }}"
+				class="hover:text-primary transition-colors">
+				{{ b.name }}
+			  </a>
+			</td>
+			<td class="px-3 py-2 text-slate-300">
+			  {{ (b.size / 1024 / 1024)|round(2) }} MB
+			</td>
+            <td class="px-3 py-2 text-slate-400">
+              {{ b.mtime }}
+            </td>
+			<td class="px-3 py-2 text-center relative z-[200]">
+
+			  <button
+				type="button"
+				data-backup-menu-toggle="{{ loop.index }}"
+				class="inline-flex items-center justify-center
+					   w-8 h-8 rounded-lg
+					   hover:bg-slate-800/80
+					   text-slate-400 hover:text-slate-200
+					   transition">
+
+				<svg xmlns="http://www.w3.org/2000/svg"
+					 class="w-4 h-4"
+					 fill="currentColor"
+					 viewBox="0 0 24 24">
+				  <circle cx="12" cy="5" r="2"></circle>
+				  <circle cx="12" cy="12" r="2"></circle>
+				  <circle cx="12" cy="19" r="2"></circle>
+				</svg>
+
+			  </button>
+
+			  <div
+				id="backup-menu-{{ loop.index }}"
+				class="hidden absolute right-3 bottom-10 z-[9999]
+					   w-44 overflow-hidden
+					   rounded-xl border border-slate-800
+					   bg-slate-900 shadow-2xl">
+
+				<a
+				  href="{{ url_for('download_backup', filename=b.name) }}"
+				  class="flex items-center gap-2
+						 px-4 py-2.5 text-xs
+						 text-slate-300 hover:bg-slate-800 transition">
+				  <span aria-hidden="true">&darr;</span>
+				  <span>{{ t("download") if t("download") else "Download" }}</span>
+				</a>
+
+				<button
+				  type="button"
+				  data-backup-restore="{{ b.name }}"
+				  class="w-full flex items-center gap-2
+						 px-4 py-2.5 text-xs text-left
+						 text-amber-300 hover:bg-slate-800 transition">
+				  <span aria-hidden="true">&#8635;</span>
+				  <span>{{ t("restore_btn") }}</span>
+				</button>
+
+				<button
+				  type="button"
+				  data-backup-delete="{{ b.name }}"
+				  class="w-full flex items-center gap-2
+						 px-4 py-2.5 text-xs text-left
+						 text-rose-300 hover:bg-slate-800 transition">
+				  <span aria-hidden="true">&times;</span>
+				  <span>{{ t("delete") if t("delete") else "Delete" }}</span>
+				</button>
+
+			  </div>
+
+			</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</form>
+<!-- Restore confirm modal (nice UI, replaces browser confirm()) -->
+<div id="restoreConfirmModal" class="hidden fixed inset-0 z-50" aria-hidden="true">
+  <div class="absolute inset-0 bg-black/70"></div>
+
+  <div class="relative mx-auto mt-24 w-[92%] max-w-lg">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+      <div class="p-5">
+        <div class="text-sm font-semibold text-slate-100">{{ t("confirm_restore_title") if t("confirm_restore_title") else "Confirm restore" }}</div>
+        <div class="text-xs text-slate-400 mt-2" id="restoreConfirmModalText"></div>
+        <div class="text-[11px] text-slate-500 mt-3">
+          {{ t("confirm_restore_hint") if t("confirm_restore_hint") else "This will overwrite the current database. A container restart may be required." }}
+        </div>
+      </div>
+
+      <div class="border-t border-slate-800"></div>
+
+      <div class="p-4 flex items-center justify-end gap-2">
+        <button type="button" id="restoreConfirmCancel"
+                class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm text-slate-200">
+          {{ t("cancel") }}
+        </button>
+
+        <button type="button" id="restoreConfirmOk"
+                class="px-4 py-2 rounded-lg bg-primary/80 hover:bg-primary text-white text-sm">
+          {{ t("confirm") if t("confirm") else "Confirm" }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+<div
+  id="delete-backup-modal"
+  class="fixed inset-0 z-[120] hidden items-center justify-center bg-black/70 backdrop-blur-sm">
+
+  <div class="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl">
+
+    <div class="border-b border-slate-800 px-6 py-4">
+      <h3 class="text-sm font-semibold text-white">
+        {{ t("delete_backup") if t("delete_backup") else "Delete backup" }}
+      </h3>
+    </div>
+
+    <div class="px-6 py-5">
+      <p class="text-sm text-slate-300">
+        {{ t("delete_backup_confirm") if t("delete_backup_confirm") else "Are you sure you want to delete this backup?" }}
+      </p>
+
+      <div class="mt-4 rounded-lg bg-slate-950/70 px-3 py-2 text-xs font-mono text-slate-400">
+        <span id="delete-backup-name"></span>
+      </div>
+    </div>
+
+    <div class="flex justify-end gap-3 border-t border-slate-800 px-6 py-4">
+
+      <button
+        type="button"
+        data-backup-delete-cancel
+        class="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800 transition">
+        {{ t("cancel") }}
+      </button>
+
+      <button
+        type="button"
+        data-backup-delete-confirm
+        class="rounded-lg bg-rose-600 px-4 py-2 text-sm text-white hover:bg-rose-500 transition">
+        {{ t("delete") if t("delete") else "Delete" }}
+      </button>
+
+    </div>
+
+  </div>
+</div>

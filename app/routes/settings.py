@@ -1,0 +1,570 @@
+# Auto-split from app.py (keep URLs/endpoints intact)
+import os
+from pathlib import Path
+
+from flask import (
+    render_template, g, request, redirect, url_for, flash, session, current_app, send_file,
+)
+
+from logging_utils import get_logger, update_debug_mode_cache, handler
+from core.log_retention import validate_log_retention
+from core.i18n import get_translator, get_available_languages
+from werkzeug.security import generate_password_hash, check_password_hash
+
+from tasks_engine import apply_cron_master_switch, sync_expiry_tasks_from_settings, force_task_run, mark_auto_enable_dirty
+from web.helpers import get_db, add_log
+from secret_store import encryption_key_status, encrypt_secret
+from core.auth_totp import provisioning_uri, verify_totp_code
+from core.auth_totp_enrollment import (
+    consume_totp_enrollment,
+    get_or_begin_totp_enrollment,
+)
+from core.admin_auth_identities import get_admin_auth_identity, sync_local_admin_identity
+from core.auth_principal import update_admin_principal_email
+from core.auth_principal import admin_required
+from core.turnstile import verify_turnstile
+from core.error_reporting import log_handled_failure
+from web.security import get_client_ip
+
+settings_logger = get_logger("settings")
+
+SETTINGS_PAGE_COLUMNS = """
+    id,
+    default_language,
+    timezone,
+    admin_email,
+    contact_email,
+    brand_name,
+    portal_logo_url,
+    default_subscription_days,
+    delete_after_expiry_days,
+    expiry_mode,
+    warn_then_disable_days,
+    preavis_days,
+    reminder_days,
+    enable_cron_jobs,
+    maintenance_mode,
+    debug_mode,
+    log_retention_days,
+    log_max_size_mb,
+    web_secure_cookies,
+    web_cookie_samesite,
+    web_trust_proxy,
+    plex_user_import_mode,
+    enable_anonymous_telemetry,
+    admin_totp_enabled,
+    admin_totp_local_trust_enabled
+    ,turnstile_enabled,turnstile_site_key,turnstile_secret_key,turnstile_mode,turnstile_protect_portal,turnstile_protect_admin
+"""
+
+
+def register(app):
+    def _branding_directory():
+        return Path(current_app.config["DATABASE_PATH"]).resolve().parent / "branding"
+
+    @app.get("/branding/logo")
+    def branding_logo():
+        row = get_db().query_one("SELECT portal_logo_url FROM settings WHERE id=1")
+        directory = _branding_directory()
+        matches = list(directory.glob("logo.*")) if directory.exists() else []
+        if not row or row["portal_logo_url"] != "/branding/logo" or not matches:
+            return "", 404
+        response = send_file(matches[0], conditional=True, max_age=86400)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        return response
+
+    @app.post("/settings/turnstile/test")
+    @admin_required
+    def settings_turnstile_test():
+        db = get_db()
+        settings = db.query_one(
+            "SELECT turnstile_enabled,turnstile_site_key,turnstile_secret_key,turnstile_mode,"
+            "turnstile_protect_portal,turnstile_protect_admin FROM settings WHERE id=1"
+        )
+        result = verify_turnstile(
+            settings, request.form.get("cf-turnstile-response") or "",
+            remote_ip=get_client_ip(), hostname=request.host,
+        )
+        if result.get("reason") == "verified":
+            flash(get_translator()("turnstile_test_success"), "success")
+        else:
+            flash(get_translator()("turnstile_test_failed"), "error")
+        return redirect(url_for("settings_page"))
+
+    @app.route("/settings", methods=["GET"])
+    def settings_page():
+        db = get_db()
+
+        # ------------------------------
+        # Charger settings (source unique)
+        # ------------------------------
+        settings = db.query_one(
+            f"SELECT {SETTINGS_PAGE_COLUMNS} FROM settings WHERE id = 1"
+        )
+        if not settings:
+            flash(get_translator()("flash.settings_row_missing"), "error")
+            return redirect("/")
+
+        settings = dict(settings)
+        plex_auth_identity = get_admin_auth_identity(db, "plex")
+        plex_server_configured = bool(db.query_one(
+            "SELECT id FROM servers WHERE LOWER(TRIM(type))='plex' LIMIT 1"
+        ))
+        plex_auth_config = db.query_one(
+            "SELECT plex_require_vodum_totp FROM admin_accounts WHERE id = 1"
+        )
+        totp_enabled = int(settings.get("admin_totp_enabled") or 0) == 1
+        pending_totp_secret = (
+            "" if totp_enabled else get_or_begin_totp_enrollment(
+                session, purpose="settings"
+            )
+        )
+        pending_totp_uri = provisioning_uri(pending_totp_secret, settings.get("admin_email") or "admin") if pending_totp_secret else ""
+
+        from core.public_api import SCOPES as api_scopes, list_tokens as list_api_tokens
+        try:
+            api_tokens = list_api_tokens(db)
+        except Exception:
+            log_handled_failure("settings.api_tokens")
+            api_tokens = []
+
+        return render_template(
+            "settings/settings.html",
+            api_tokens=api_tokens,
+            api_scopes=api_scopes,
+            # Set only while answering the token creation POST; never stored.
+            api_token_created=g.get("api_token_created"),
+            settings=settings,
+            active_page="settings",
+            current_lang=session.get("lang", settings["default_language"]),
+            available_languages=get_available_languages(),
+            app_version=g.get("app_version", "dev"),
+            encryption_key_status=encryption_key_status(),
+            pending_totp_secret=pending_totp_secret,
+            pending_totp_uri=pending_totp_uri,
+            plex_auth_identity=plex_auth_identity,
+            plex_server_configured=plex_server_configured,
+            plex_require_vodum_totp=(
+                int(plex_auth_config["plex_require_vodum_totp"] or 0) == 1
+                if plex_auth_config else False
+            ),
+        )
+
+    @app.route("/settings/save", methods=["POST"])
+    def settings_save():
+        db = get_db()
+
+
+        # ------------------------------
+        # Charger settings (source unique)
+        # ------------------------------
+        settings = db.query_one(
+            f"SELECT {SETTINGS_PAGE_COLUMNS} FROM settings WHERE id = 1"
+        )
+        if not settings:
+            flash(get_translator()("flash.settings_row_missing"), "error")
+            return redirect("/")
+
+        settings = dict(settings)
+        plex_user_import_mode = str(request.form.get(
+            "plex_user_import_mode", settings.get("plex_user_import_mode") or "shared_only"
+        )).strip().lower()
+        if plex_user_import_mode not in ("global", "shared_only"):
+            plex_user_import_mode = "shared_only"
+
+
+        def _sanitize_notifications_order(raw: str) -> str:
+            allowed = {"email", "discord"}
+            raw = (raw or "").strip().lower()
+            if not raw:
+                return "email"
+
+            parts = [p.strip() for p in raw.split(",") if p.strip()]
+            cleaned = []
+            for p in parts:
+                if p in allowed and p not in cleaned:
+                    cleaned.append(p)
+
+            if not cleaned:
+                return "email"
+            if len(cleaned) == 1:
+                return cleaned[0]
+            return f"{cleaned[0]},{cleaned[1]}"
+
+        # --------------------------------------------------
+        # Expiration handling (2 exclusive modes)
+        # --------------------------------------------------
+        expiry_mode = (request.form.get("expiry_mode") or settings.get("expiry_mode") or "none").strip()
+        if expiry_mode not in ("none", "warn_only", "warn_then_disable", "disable", "delete"):
+            expiry_mode = "none"
+        if expiry_mode == "delete":
+            try:
+                deletion_delay = int(request.form.get("delete_after_expiry_days", settings.get("delete_after_expiry_days") or 30))
+                if not 1 <= deletion_delay <= 3650:
+                    raise ValueError()
+            except (ValueError, TypeError):
+                flash("subscription_delete_invalid_delay", "error")
+                return redirect(url_for("settings_page"))
+
+
+        warn_then_disable_days_raw = (request.form.get("warn_then_disable_days") or settings.get("warn_then_disable_days") or 7)
+        try:
+            warn_then_disable_days = int(warn_then_disable_days_raw)
+        except Exception:
+            warn_then_disable_days = int(settings.get("warn_then_disable_days") or 7)
+
+        # X days must be >= 1 (only meaningful for warn_then_disable)
+        if warn_then_disable_days < 1:
+            warn_then_disable_days = 1
+
+        if expiry_mode not in ("warn_then_disable", "warn_only"):
+            warn_then_disable_days = int(settings.get("warn_then_disable_days") or 7)
+
+        try:
+            log_days, log_size = validate_log_retention(
+                request.form.get("log_retention_days", settings.get("log_retention_days", 30)),
+                request.form.get("log_max_size_mb", settings.get("log_max_size_mb", 50)),
+            )
+        except (ValueError, TypeError):
+            flash(get_translator()("log_retention_invalid"), "error")
+            return redirect(url_for("settings_page"))
+
+        old_enable_cron_jobs = 1 if int(settings.get("enable_cron_jobs") or 0) == 1 else 0
+
+        new_values = {
+            "log_retention_days": log_days,
+            "log_max_size_mb": log_size,
+            "default_language": request.form.get(
+                "default_language", settings["default_language"]
+            ),
+            "timezone": request.form.get(
+                "timezone", settings["timezone"]
+            ),
+            "contact_email": request.form.get(
+                "contact_email", settings.get("contact_email") or settings.get("admin_email") or ""
+            ),
+            "default_subscription_days": request.form.get(
+                "default_expiration_days",
+                settings["default_subscription_days"],
+            ),
+            "delete_after_expiry_days": request.form.get(
+                "delete_after_expiry_days",
+                settings["delete_after_expiry_days"],
+            ),
+            "plex_user_import_mode": plex_user_import_mode,
+            "enable_anonymous_telemetry": 1 if request.form.get("enable_anonymous_telemetry") == "on" else 0,
+            # ✅ délais statut (settings ONLY)
+            "preavis_days": request.form.get(
+                "preavis_days",
+                settings["preavis_days"],
+            ),
+            "reminder_days": request.form.get(
+                "relance_days",
+                settings["reminder_days"],
+            ),
+            "brand_name": request.form.get("brand_name", settings.get("brand_name")),
+            "portal_logo_url": settings.get("portal_logo_url"),
+
+            "expiry_mode": expiry_mode,
+            "warn_then_disable_days": warn_then_disable_days,
+            # legacy flag kept for backward compatibility
+            "disable_on_expiry": 1 if expiry_mode == "disable" else 0,
+            "enable_cron_jobs": 1 if request.form.get("enable_cron_jobs") == "1" else 0,
+            "maintenance_mode": 1 if request.form.get("maintenance_mode") == "1" else 0,
+            "debug_mode": 1 if request.form.get("debug_mode") == "1" else 0,
+            "web_secure_cookies": 1 if request.form.get("web_secure_cookies") == "1" else 0,
+            "web_cookie_samesite": request.form.get(
+                "web_cookie_samesite",
+                settings.get("web_cookie_samesite") or "Lax"
+            ),
+            "web_trust_proxy": 1 if request.form.get("web_trust_proxy") == "1" else 0,
+        }
+
+        logo = request.files.get("brand_logo")
+        if logo and logo.filename:
+            raw = logo.stream.read(2 * 1024 * 1024 + 1)
+            signatures = ((b"\x89PNG\r\n\x1a\n", ".png"), (b"\xff\xd8\xff", ".jpg"), (b"GIF87a", ".gif"), (b"GIF89a", ".gif"))
+            extension = next((ext for signature, ext in signatures if raw.startswith(signature)), None)
+            if raw.startswith(b"RIFF") and raw[8:12] == b"WEBP":
+                extension = ".webp"
+            if len(raw) > 2 * 1024 * 1024 or not extension:
+                flash(get_translator()("settings_logo_invalid"), "error")
+                return redirect(url_for("settings_page"))
+            directory = _branding_directory()
+            directory.mkdir(parents=True, exist_ok=True)
+            temporary = directory / f".logo{extension}.uploading"
+            temporary.write_bytes(raw)
+            for old in directory.glob("logo.*"):
+                old.unlink(missing_ok=True)
+            os.replace(temporary, directory / f"logo{extension}")
+            new_values["portal_logo_url"] = "/branding/logo"
+        elif request.form.get("remove_brand_logo") == "1":
+            directory = _branding_directory()
+            if directory.exists():
+                for old in directory.glob("logo.*"):
+                    old.unlink(missing_ok=True)
+            new_values["portal_logo_url"] = None
+
+        # --------------------------------------------------
+        # Conversions INT (uniformes)
+        # --------------------------------------------------
+        for key in (
+            "default_subscription_days",
+            "delete_after_expiry_days",
+            "preavis_days",
+            "reminder_days",
+            "warn_then_disable_days",
+        ):
+            try:
+                new_values[key] = int(new_values[key])
+            except Exception:
+                new_values[key] = settings[key]
+
+        if new_values["web_cookie_samesite"] not in ("Lax", "Strict", "None"):
+            new_values["web_cookie_samesite"] = settings.get("web_cookie_samesite") or "Lax"
+
+        # SameSite=None impose Secure=True sur les navigateurs modernes
+        if new_values["web_cookie_samesite"] == "None":
+            new_values["web_secure_cookies"] = 1
+
+        # --------------------------------------------------
+        # UPDATE settings (source unique)
+        # --------------------------------------------------
+        db.execute(
+            """
+            UPDATE settings SET
+                default_language = :default_language,
+                timezone = :timezone,
+                contact_email = :contact_email,
+                brand_name = :brand_name,
+                portal_logo_url = :portal_logo_url,
+                default_subscription_days = :default_subscription_days,
+                delete_after_expiry_days = :delete_after_expiry_days,
+                expiry_mode = :expiry_mode,
+                warn_then_disable_days = :warn_then_disable_days,
+                preavis_days = :preavis_days,
+                reminder_days = :reminder_days,
+                disable_on_expiry = :disable_on_expiry,
+                enable_cron_jobs = :enable_cron_jobs,
+                maintenance_mode = :maintenance_mode,
+                debug_mode = :debug_mode,
+                log_retention_days = :log_retention_days,
+                log_max_size_mb = :log_max_size_mb,
+                web_secure_cookies = :web_secure_cookies,
+                web_cookie_samesite = :web_cookie_samesite,
+                web_trust_proxy = :web_trust_proxy,
+                plex_user_import_mode = :plex_user_import_mode,
+                enable_anonymous_telemetry = :enable_anonymous_telemetry
+            WHERE id = 1
+            """,
+            new_values,
+        )
+        update_debug_mode_cache(bool(new_values["debug_mode"]))
+        try:
+            handler.maintain(force=True)
+        except OSError:
+            settings_logger.exception("Unable to clean application logs")
+
+        # Both modes report on the same schedule; the option controls detail.
+        db.execute("UPDATE tasks SET enabled=1, status='idle', next_run=NULL WHERE name='send_telemetry'")
+
+        current_app.config["SESSION_COOKIE_SAMESITE"] = new_values["web_cookie_samesite"]
+        current_app.config["SESSION_COOKIE_SECURE"] = bool(new_values["web_secure_cookies"]) or (
+            new_values["web_cookie_samesite"] == "None"
+        )
+        current_app.config["TRUST_PROXY_ENABLED"] = bool(new_values["web_trust_proxy"])
+
+        # --------------------------------------------------
+        # MASTER scheduled tasks switch (enable_cron_jobs)
+        # --------------------------------------------------
+        if old_enable_cron_jobs != new_values["enable_cron_jobs"]:
+            apply_cron_master_switch(new_values["enable_cron_jobs"])
+
+        # --------------------------------------------------
+        # Wakeup tasks impacted by settings changes
+        # --------------------------------------------------
+        force_task_run("check_mailing_status")
+        force_task_run("send_comm_campaigns")
+        force_task_run("send_telemetry")
+
+        mark_auto_enable_dirty()
+
+        # --------------------------------------------------
+        # Sync TASKS from SETTINGS (source unique)
+        # --------------------------------------------------
+        sync_expiry_tasks_from_settings(
+            new_values.get("expiry_mode"),
+            new_values["enable_cron_jobs"],
+        )
+
+        # --------------------------------------------------
+        # Log cohérent
+        # --------------------------------------------------
+        add_log(
+            "info",
+            "settings",
+            "Settings updated",
+            {
+                "default_language": new_values["default_language"],
+                "default_subscription_days": new_values["default_subscription_days"],
+                "preavis_days": new_values["preavis_days"],
+                "reminder_days": new_values["reminder_days"],
+            },
+        )
+
+        if new_values["default_language"] != settings.get("default_language"):
+            from core.default_data_i18n import localize_default_data
+            localize_default_data(db, new_values["default_language"])
+
+        if new_values["default_language"] in get_available_languages():
+            session["lang"] = new_values["default_language"]
+        else:
+            session.pop("lang", None)
+
+        flash(get_translator(new_values)("settings_saved"), "success")
+        return redirect(url_for("settings_page"))
+
+
+
+
+
+    @app.route("/settings/security", methods=["POST"])
+    def settings_security_save():
+        db = get_db()
+        settings = db.query_one(
+            """
+            SELECT admin_email,admin_password_hash,admin_totp_enabled,admin_totp_secret,admin_totp_local_trust_enabled,
+                   turnstile_enabled,turnstile_site_key,turnstile_secret_key,turnstile_mode,turnstile_protect_portal,turnstile_protect_admin
+            FROM settings
+            WHERE id = 1
+            """
+        )
+        if not settings:
+            flash(get_translator()("flash.settings_row_missing"), "error")
+            return redirect(url_for("settings_page"))
+
+        settings = dict(settings)
+        current_password = request.form.get("current_password") or ""
+        password_hash = settings.get("admin_password_hash") or ""
+        if not password_hash or not check_password_hash(password_hash, current_password):
+            flash(get_translator()("settings_current_password_invalid"), "error")
+            return redirect(url_for("settings_page"))
+
+        admin_email = (request.form.get("admin_email") or "").strip().lower()
+        if (
+            not admin_email
+            or " " in admin_email
+            or admin_email.count("@") != 1
+            or "." not in admin_email.split("@", 1)[1]
+        ):
+            flash(get_translator()("settings_login_email_invalid"), "error")
+            return redirect(url_for("settings_page"))
+
+        new_password = (request.form.get("new_password") or "").strip()
+        confirm_password = (request.form.get("confirm_password") or "").strip()
+        password_update_sql = ""
+        params = {
+            "admin_email": admin_email,
+            "admin_totp_enabled": int(settings.get("admin_totp_enabled") or 0),
+            "admin_totp_secret": settings.get("admin_totp_secret"),
+            "admin_totp_local_trust_enabled": int(settings.get("admin_totp_local_trust_enabled") or 0),
+            "turnstile_enabled": 1 if request.form.get("turnstile_enabled") == "1" else 0,
+            "turnstile_site_key": str(request.form.get("turnstile_site_key") or "").strip() or None,
+            "turnstile_secret_key": settings.get("turnstile_secret_key"),
+            "turnstile_mode": request.form.get("turnstile_mode") if request.form.get("turnstile_mode") in {"compact", "invisible"} else "compact",
+            "turnstile_protect_portal": 1 if request.form.get("turnstile_protect_portal") == "1" else 0,
+            "turnstile_protect_admin": 1 if request.form.get("turnstile_protect_admin") == "1" else 0,
+        }
+        submitted_turnstile_secret = str(request.form.get("turnstile_secret_key") or "").strip()
+        if submitted_turnstile_secret:
+            params["turnstile_secret_key"] = encrypt_secret(submitted_turnstile_secret)
+        if params["turnstile_enabled"] and (not params["turnstile_site_key"] or not params["turnstile_secret_key"]):
+            flash(get_translator()("turnstile_configuration_incomplete"), "error")
+            return redirect(url_for("settings_page"))
+
+        if new_password or confirm_password:
+            if len(new_password) < 8:
+                flash(get_translator()("settings_admin_password_too_short"), "error")
+                return redirect(url_for("settings_page"))
+            if new_password != confirm_password:
+                flash(get_translator()("settings_password_confirmation_mismatch"), "error")
+                return redirect(url_for("settings_page"))
+            password_update_sql = ", admin_password_hash = :admin_password_hash"
+            params["admin_password_hash"] = generate_password_hash(new_password)
+
+        requested_totp = request.form.get("admin_totp_enabled") == "1"
+        current_totp = int(settings.get("admin_totp_enabled") or 0) == 1
+        requested_local_trust = request.form.get("admin_totp_local_trust_enabled") == "1"
+
+        if requested_totp and not current_totp:
+            pending_secret = consume_totp_enrollment(session, purpose="settings")
+            totp_code = request.form.get("totp_code") or ""
+            if not pending_secret or not verify_totp_code(pending_secret, totp_code):
+                flash(get_translator()("settings_totp_invalid"), "error")
+                return redirect(url_for("settings_page"))
+            params["admin_totp_enabled"] = 1
+            params["admin_totp_secret"] = encrypt_secret(pending_secret)
+            params["admin_totp_local_trust_enabled"] = 0
+        elif not requested_totp and current_totp:
+            params["admin_totp_enabled"] = 0
+            params["admin_totp_secret"] = None
+            params["admin_totp_local_trust_enabled"] = 0
+        elif requested_totp and current_totp:
+            params["admin_totp_local_trust_enabled"] = 1 if requested_local_trust else 0
+
+        db.execute(
+            f"""
+            UPDATE settings
+            SET admin_email = :admin_email,
+                admin_totp_enabled = :admin_totp_enabled,
+                admin_totp_secret = :admin_totp_secret,
+                admin_totp_local_trust_enabled = :admin_totp_local_trust_enabled
+                ,turnstile_enabled=:turnstile_enabled,turnstile_site_key=:turnstile_site_key,
+                turnstile_secret_key=:turnstile_secret_key,turnstile_mode=:turnstile_mode,
+                turnstile_protect_portal=:turnstile_protect_portal,turnstile_protect_admin=:turnstile_protect_admin
+                {password_update_sql}
+            WHERE id = 1
+            """,
+            params,
+        )
+        sync_local_admin_identity(db, admin_email)
+
+        db.execute(
+            """
+            UPDATE admin_accounts
+            SET plex_require_vodum_totp = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = 1
+            """,
+            (
+                1
+                if requested_totp
+                and request.form.get("plex_require_vodum_totp") == "1"
+                else 0,
+            ),
+        )
+
+        update_admin_principal_email(session, admin_email)
+        flash(get_translator()("settings_security_saved"), "success")
+        return redirect(url_for("settings_page"))
+    @app.route("/settings/<section>", methods=["GET"])
+    def settings_section_page(section: str):
+        # Legacy section URLs predate the unified settings page. Keeping them as
+        # redirects avoids rendering templates that no longer exist.
+        return redirect(url_for("settings_page"))
+
+
+    # -----------------------------
+    # LOGS
+    # -----------------------------
+    
+    def paginate(logs, page, per_page=10):
+        start = (page - 1) * per_page
+        end = start + per_page
+        total_pages = (len(logs) + per_page - 1) // per_page
+        return logs[start:end], total_pages
+
+    
+
+
+
+

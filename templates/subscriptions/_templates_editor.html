@@ -1,0 +1,429 @@
+<!-- LEFT: PLAN EDITOR -->
+<div class="lg:col-span-8 xl:col-span-8 bg-slate-900 border border-slate-800 rounded-2xl p-6">
+
+  <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-5 gap-3">
+    <div>
+      <h2 class="text-lg font-semibold text-slate-100">{{ t("subscription_plan") }}</h2>
+      <div class="text-sm text-slate-400 mt-1">{{ t("subscription_plan_editor_hint") }}</div>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-2 shrink-0">
+      <span id="tpl_policies_count_badge" class="text-xs text-slate-500 hidden"></span>
+      <button type="button"
+              onclick="resetTemplateEditor()"
+              class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm font-medium text-slate-200">
+        {{ t("reset") }}
+      </button>
+      <button type="submit"
+              form="tpl_form"
+              id="tpl_submit_btn"
+              class="px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-sm font-semibold text-white">
+        {{ t("create") }}
+      </button>
+    </div>
+  </div>
+
+  <form id="tpl_form" method="post" action="{{ url_for('subscription_templates_save') }}" class="space-y-5" onsubmit="return syncPoliciesJson();">
+    <input type="hidden" name="template_id" id="template_id" value="">
+    <input type="hidden" name="policies_json" id="policies_json" value="[]">
+
+    <!-- PLAN INFO -->
+    <div class="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden">
+      <div class="px-5 py-4 border-b border-slate-800 bg-slate-900/40">
+        <div class="text-sm font-semibold text-slate-100">{{ t("subscription_plan_details") }}</div>
+        <div class="text-xs text-slate-500 mt-1">{{ t("subscription_plan_details_hint") }}</div>
+      </div>
+
+      <div class="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="text-sm">
+          <label class="block text-xs text-slate-400 mb-1">{{ t("name") }}</label>
+          <input type="text" name="name" id="tpl_name" required
+                 class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-slate-100">
+        </div>
+
+        <div class="text-sm">
+          <label class="block text-xs text-slate-400 mb-1">{{ t("notes") }}</label>
+          <input type="text" name="notes" id="tpl_notes"
+                 class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-slate-100">
+        </div>
+
+        <div class="text-sm">
+          <label class="block text-xs text-slate-400 mb-1">{{ t("duration_days") }}</label>
+          <input type="text"
+                 name="duration_days"
+                 id="tpl_duration_days"
+                 inputmode="numeric"
+                 pattern="[0-9]*"
+                 value="30"
+                 class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-slate-100"
+                 placeholder="30">
+        </div>
+
+        <div class="text-sm">
+          <label class="block text-xs text-slate-400 mb-1">{{ t("subscription_value") }} ({{ settings.subscription_currency or 'EUR' }})</label>
+          <input type="text"
+                 name="subscription_value"
+                 id="tpl_subscription_value"
+                 value=""
+                 class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-slate-100"
+                 placeholder="{{ t('subscription_value_placeholder') }}">
+        </div>
+
+        <div class="text-sm md:col-span-2">
+          <div class="flex flex-wrap items-center gap-4">
+            <label class="inline-flex items-center gap-2 text-xs text-slate-300 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2">
+              <input type="checkbox"
+                     name="is_default"
+                     id="tpl_is_default"
+                     value="1"
+                     class="rounded border-slate-700 bg-slate-900">
+              {{ t("set_as_default") }}
+              <span class="relative inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-800 text-[10px] text-slate-400 cursor-help group">?<span class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-72 -translate-x-1/2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-normal text-slate-200 opacity-0 shadow-xl transition-opacity group-hover:opacity-100">{{ t("subscription_set_as_default_help") }}</span></span>
+            </label>
+
+            <label class="inline-flex items-center gap-2 text-xs text-slate-300 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2">
+              <input type="checkbox"
+                     name="is_enabled"
+                     id="tpl_is_enabled"
+                     value="1"
+                     checked
+                     class="rounded border-slate-700 bg-slate-900">
+              {{ t("enabled") }}
+            </label>
+
+            <label class="inline-flex items-center gap-2 text-xs text-slate-300 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2">
+              <input type="checkbox"
+                     name="is_lifetime"
+                     id="tpl_is_lifetime"
+                     value="1"
+                     class="rounded border-slate-700 bg-slate-900"
+                     onchange="updateLifetimeDurationState()">
+              {{ t("lifetime_subscription") }}
+            </label>
+            <label class="inline-flex items-center gap-2 text-xs text-slate-300 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2">
+              <input type="checkbox" name="hide_from_portal" id="tpl_hide_from_portal" value="1" class="rounded border-slate-700 bg-slate-900">
+              {{ t("subscription_hide_from_portal") }}
+              <span class="relative inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-800 text-[10px] text-slate-400 cursor-help group">?<span class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-72 -translate-x-1/2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-normal text-slate-200 opacity-0 shadow-xl transition-opacity group-hover:opacity-100">{{ t("subscription_hide_from_portal_help") }}</span></span>
+            </label>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- SIMPLE LIMITS -->
+    <div id="simple_policy_mode" class="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden">
+      <div class="px-5 py-4 border-b border-slate-800 bg-slate-900/40 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div>
+          <div class="text-sm font-semibold text-slate-100">{{ t("subscription_plan_rules") }}</div>
+          <div class="text-xs text-slate-500 mt-1">{{ t("subscription_plan_rules_simple_hint") }}</div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 shrink-0">
+          <button
+            type="button"
+            id="templatePolicyModeToggleBtnSimple"
+            onclick="setTemplatePolicyMode('advanced')"
+            class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200"
+          >
+            {{ t("advanced") }}
+          </button>
+        </div>
+      </div>
+
+      <div class="p-5 grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div class="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+            <div>
+              <div class="text-sm font-semibold text-slate-100">{{ t("subscription_limit_streams") }}</div>
+              <div class="text-xs text-slate-500 mt-1">{{ t("subscription_limit_streams_hint") }}</div>
+            </div>
+            <label class="inline-flex items-center gap-2 text-xs text-slate-300">
+              <input type="checkbox" id="simple_streams_enabled" class="rounded border-slate-700 bg-slate-900">
+              {{ t("enabled") }}
+            </label>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+            <div>
+              <label class="text-xs text-slate-400">{{ t("subscription_maximum_streams") }}</label>
+              <input id="simple_streams_max" value="2" inputmode="numeric"
+                     class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100">
+            </div>
+            <div>
+              <label class="text-xs text-slate-400">{{ t("action") }}</label>
+              <select id="simple_streams_selector" class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100">
+                <option value="kill_newest">{{ t("policies_selector_kill_newest") }}</option>
+                <option value="kill_oldest">{{ t("policies_selector_kill_oldest") }}</option>
+                <option value="kill_transcoding_first">{{ t("policies_selector_kill_transcoding") }}</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+            <div>
+              <div class="text-sm font-semibold text-slate-100">{{ t("subscription_ip_addresses") }}</div>
+              <div class="text-xs text-slate-500 mt-1">{{ t("subscription_ip_addresses_hint") }}</div>
+            </div>
+            <label class="inline-flex items-center gap-2 text-xs text-slate-300">
+              <input type="checkbox" id="simple_ips_enabled" class="rounded border-slate-700 bg-slate-900">
+              {{ t("enabled") }}
+            </label>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+            <div>
+              <label class="text-xs text-slate-400">{{ t("subscription_maximum_ips") }}</label>
+              <input id="simple_ips_max" value="1" inputmode="numeric"
+                     class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100">
+            </div>
+            <div>
+              <label class="text-xs text-slate-400">{{ t("action") }}</label>
+              <select id="simple_ips_selector" class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100">
+                <option value="kill_newest">{{ t("policies_selector_kill_newest") }}</option>
+                <option value="kill_oldest">{{ t("policies_selector_kill_oldest") }}</option>
+                <option value="kill_transcoding_first">{{ t("policies_selector_kill_transcoding") }}</option>
+              </select>
+            </div>
+          </div>
+          <label class="mt-3 inline-flex items-center gap-2 text-xs text-slate-300">
+            <input type="checkbox" id="simple_ips_lan" class="rounded border-slate-700 bg-slate-900">
+            {{ t("policies_allow_local_ip") }}
+          </label>
+        </div>
+
+        <div class="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+            <div>
+              <div class="text-sm font-semibold text-slate-100">{{ t("bitrate") }}</div>
+              <div class="text-xs text-slate-500 mt-1">{{ t("subscription_bitrate_hint") }}</div>
+            </div>
+            <label class="inline-flex items-center gap-2 text-xs text-slate-300">
+              <input type="checkbox" id="simple_bitrate_enabled" class="rounded border-slate-700 bg-slate-900">
+              {{ t("enabled") }}
+            </label>
+          </div>
+          <div class="mt-4">
+            <label class="text-xs text-slate-400">{{ t("subscription_maximum_bitrate_kbps") }}</label>
+            <input id="simple_bitrate_max" value="20000" inputmode="numeric"
+                   class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100">
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+            <div>
+              <div class="text-sm font-semibold text-slate-100">{{ t("subscription_allowed_devices") }}</div>
+              <div class="text-xs text-slate-500 mt-1">{{ t("subscription_allowed_devices_hint") }}</div>
+            </div>
+            <label class="inline-flex items-center gap-2 text-xs text-slate-300">
+              <input type="checkbox" id="simple_devices_enabled" class="rounded border-slate-700 bg-slate-900">
+              {{ t("enabled") }}
+            </label>
+          </div>
+          <div class="mt-4">
+            <label class="text-xs text-slate-400">{{ t("subscription_device_names") }}</label>
+            <input id="simple_devices_allowed" placeholder="{{ t('subscription_devices_placeholder') }}"
+                   class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GENERATED SUMMARY -->
+    <div id="simple_policy_summary" class="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden">
+      <div class="px-5 py-4 border-b border-slate-800 bg-slate-900/40 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <div class="text-sm font-semibold text-slate-100">{{ t("subscription_rules_generated") }}</div>
+          <div class="text-xs text-slate-500 mt-1">{{ t("subscription_rules_generated_hint") }}</div>
+        </div>
+        <div class="text-xs text-slate-500" id="tpl_policy_summary_mode_hint">{{ t("simple_view") }}</div>
+      </div>
+
+      <div id="tpl_policy_cards" class="p-5 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3"></div>
+    </div>
+
+    <!-- ADVANCED POLICY EDITOR -->
+    <div id="advanced_policy_editor" class="hidden bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden">
+      <div class="px-5 py-4 border-b border-slate-800 bg-slate-900/40 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div>
+          <div class="text-sm font-semibold text-slate-100">{{ t("subscription_plan_rules") }}</div>
+          <div class="text-xs text-slate-500 mt-1">{{ t("advanced") }} : {{ t("subscriptions_advanced_mode_hint") }}</div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 shrink-0">
+          <button
+            type="button"
+            id="templatePolicyModeToggleBtnAdvanced"
+            onclick="setTemplatePolicyMode('simple')"
+            class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200"
+          >
+            {{ t("simple") }}
+          </button>
+        </div>
+      </div>
+
+      <div class="p-5">
+        <!-- Policy builder -->
+        <div class="border border-slate-800 rounded-xl p-4 grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-900/30">
+          <div>
+            <label class="text-xs text-slate-400">{{ t("policies_rule") }}</label>
+            <select id="p_rule_type" class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100">
+              <option value="max_streams_per_user">{{ t("policies_rule_max_streams_user") }}</option>
+              <option value="max_ips_per_user">{{ t("policies_rule_max_ips_user") }}</option>
+              <option value="max_streams_per_ip">{{ t("policies_rule_max_streams_ip") }}</option>
+              <option value="max_transcodes_global">{{ t("policies_rule_max_transcodes_server") }}</option>
+              <option value="ban_4k_transcode">{{ t("policies_rule_ban_4k_transcode") }}</option>
+              <option value="max_bitrate_kbps">{{ t("policies_rule_max_bitrate") }}</option>
+              <option value="device_allowlist">{{ t("policies_rule_device_allowlist") }}</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="text-xs text-slate-400">{{ t("policies_provider") }}</label>
+            <select id="p_provider" class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100">
+              <option value="">{{ t("policies_provider_both") }}</option>
+              <option value="plex">{{ t("policies_provider_plex") }}</option>
+              <option value="jellyfin">{{ t("policies_provider_jellyfin") }}</option>
+            </select>
+
+            <label class="text-xs text-slate-400 mt-3 block">{{ t("policies_server_filter") }} <span class="text-slate-500">({{ t("optional") }})</span></label>
+            <select id="p_server_id" class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100">
+              <option value="">{{ t("policies_all_servers") }}</option>
+              {% for s in servers %}
+                <option value="{{ s.id }}">{{ s.name }} ({{ s.type }})</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div>
+            <label class="text-xs text-slate-400">{{ t("policies_priority") }}</label>
+            <input id="p_priority" value="100" class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100">
+
+            <label class="text-xs text-slate-400 mt-3 block">{{ t("policies_enabled") }}</label>
+            <select id="p_enabled" class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100">
+              <option value="1" selected>{{ t("enabled") }}</option>
+              <option value="0">{{ t("disabled") }}</option>
+            </select>
+          </div>
+
+          <div class="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label class="text-xs text-slate-400">{{ t("policies_max_value") }}</label>
+              <input id="p_max_value" placeholder="{{ t('policies_max_value_placeholder') }}"
+                     class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100">
+              <label id="p_allow_local_ip_field" class="mt-3 hidden items-center gap-2 text-xs text-slate-300">
+                <input type="checkbox" id="p_allow_local_ip" value="1">
+                {{ t("policies_allow_local_ip") }}
+              </label>
+            </div>
+
+            <div>
+              <label class="text-xs text-slate-400">{{ t("policies_max_bitrate_kbps") }}</label>
+              <input id="p_max_kbps" placeholder="{{ t('policies_max_bitrate_placeholder') }}"
+                     class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100">
+            </div>
+
+            <div>
+              <label class="text-xs text-slate-400">{{ t("policies_allowed_devices") }}</label>
+              <input id="p_allowed_devices" placeholder="{{ t('policies_allowed_devices_placeholder') }}"
+                     class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100">
+            </div>
+          </div>
+
+          <div class="md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="text-xs text-slate-400">{{ t("policies_warn_title") }}</label>
+              <input id="p_warn_title" value="{{ t('policies_warn_title_default') }}"
+                     class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100">
+            </div>
+            <div>
+              <label class="text-xs text-slate-400">{{ t("policies_warn_text") }}</label>
+              <input id="p_warn_text" value="{{ t('policies_warn_text_default') }}"
+                     class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100">
+            </div>
+          </div>
+
+          <div class="md:col-span-3">
+            <label class="text-xs text-slate-400">{{ t("policies_selector") }}</label>
+            <select id="p_selector" class="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100">
+              <option value="kill_newest">{{ t("policies_selector_kill_newest") }}</option>
+              <option value="kill_oldest">{{ t("policies_selector_kill_oldest") }}</option>
+              <option value="kill_transcoding_first">{{ t("policies_selector_kill_transcoding") }}</option>
+            </select>
+          </div>
+
+          <div class="md:col-span-3 flex gap-2">
+            <button type="button" id="p_add_btn" onclick="addPolicyToTemplate()"
+                    class="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-dark text-xs font-semibold text-white">
+              {{ t("subscription_templates_add_policy") }}
+            </button>
+            <button type="button" onclick="resetPolicyBuilder()"
+                    class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-200">
+              {{ t("reset") }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Policy list preview -->
+        <div class="mt-4 bg-slate-950 border border-slate-800 rounded-xl overflow-hidden">
+          <table class="w-full text-xs">
+            <thead class="bg-slate-900/70 text-slate-400 text-left">
+              <tr>
+                <th class="px-4 py-2 w-24">{{ t("actions") }}</th>
+                <th class="px-4 py-2">{{ t("rule") }}</th>
+                <th class="px-4 py-2">{{ t("provider") }}</th>
+                <th class="px-4 py-2">{{ t("server") }}</th>
+                <th class="px-4 py-2">{{ t("priority") }}</th>
+                <th class="px-4 py-2">{{ t("enabled") }}</th>
+                <th class="px-4 py-2">{{ t("details") }}</th>
+              </tr>
+            </thead>
+            <tbody id="tpl_policies_table">
+              <tr><td class="px-4 py-3 text-slate-500" colspan="7">{{ t("subscription_templates_no_policies") }}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>
+
+<script type="application/json" id="subscription-template-editor-config">
+  {{ {
+    "labels": {
+      "advanced": t("advanced"),
+      "create": t("create"),
+      "delete": t("delete"),
+      "disabled": t("disabled"),
+      "edit": t("edit"),
+      "enabled": t("enabled"),
+      "lan": t("lan"),
+      "lifetime_subscription": t("lifetime_subscription"),
+      "policies": t("policies"),
+      "policies_all_servers": t("policies_all_servers"),
+      "policies_provider_both": t("policies_provider_both"),
+      "policies_provider_jellyfin": t("policies_provider_jellyfin"),
+      "policies_provider_plex": t("policies_provider_plex"),
+      "policies_rule_ban_4k_transcode": t("policies_rule_ban_4k_transcode"),
+      "policies_rule_device_allowlist": t("policies_rule_device_allowlist"),
+      "policies_rule_max_bitrate": t("policies_rule_max_bitrate"),
+      "policies_rule_max_ips_user": t("policies_rule_max_ips_user"),
+      "policies_rule_max_streams_ip": t("policies_rule_max_streams_ip"),
+      "policies_rule_max_streams_user": t("policies_rule_max_streams_user"),
+      "policies_rule_max_transcodes_server": t("policies_rule_max_transcodes_server"),
+      "policies_warn_text_default": t("policies_warn_text_default"),
+      "policies_warn_title_default": t("policies_warn_title_default"),
+      "save": t("save"),
+      "simple": t("simple"),
+      "subscription_allowed_devices": t("subscription_allowed_devices"),
+      "subscription_no_rules_hint": t("subscription_no_rules_hint"),
+      "subscription_summary_4k_transcode_blocked": t("subscription_summary_4k_transcode_blocked"),
+      "subscription_summary_ips_per_user": t("subscription_summary_ips_per_user"),
+      "subscription_summary_kbps_max_bitrate": t("subscription_summary_kbps_max_bitrate"),
+      "subscription_summary_server_transcodes": t("subscription_summary_server_transcodes"),
+      "subscription_summary_streams_per_ip": t("subscription_summary_streams_per_ip"),
+      "subscription_summary_streams_per_user": t("subscription_summary_streams_per_user"),
+      "subscription_templates_add_policy": t("subscription_templates_add_policy"),
+      "subscription_templates_no_policies": t("subscription_templates_no_policies")
+    }
+  }|tojson }}
+</script>

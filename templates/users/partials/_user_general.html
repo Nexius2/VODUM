@@ -1,0 +1,1040 @@
+{# templates/users/partials/_user_general.html #}
+{% if never_used %}
+<form method="post" action="{{ url_for('portal_user_invite', user_id=user.id) }}" class="mb-4">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+  <button class="rounded bg-slate-800 px-4 py-2 text-sm">{{ t('activation_resend') }}</button>
+</form>
+{% endif %}
+
+{% set _t_identity = t("identity") %}
+{% if _t_identity == "identity" %}{% set _t_identity = "Identity" %}{% endif %}
+
+{% set _t_contact = t("contact_and_notifications") %}
+{% if _t_contact == "contact_and_notifications" %}{% set _t_contact = "Contact & notifications" %}{% endif %}
+
+{% set _t_sub = t("subscription_and_status") %}
+{% if _t_sub == "subscription_and_status" %}{% set _t_sub = "Subscription & status" %}{% endif %}
+
+{% set _t_options = t("options") %}
+{% if _t_options == "options" %}{% set _t_options = "Options" %}{% endif %}
+
+<form method="post" action="{{ url_for('user_detail_save', user_id=user.id) }}" id="user_main_form">
+  <div class="flex items-center justify-between mb-4">
+    <div class="flex items-center gap-3">
+      <div class="text-sm font-semibold text-slate-200">
+        {{ t("general_info") if t("general_info") != "general_info" else "General information" }}
+      </div>
+
+      {% set colors = {
+        'active': 'bg-emerald-900/40 text-emerald-300',
+        'pre_expired': 'bg-amber-900/40 text-amber-300',
+        'reminder': 'bg-blue-900/40 text-blue-300',
+        'expired': 'bg-rose-900/40 text-rose-300',
+        'invited': 'bg-cyan-900/40 text-cyan-300',
+        'unfriended': 'bg-slate-700 text-slate-300',
+        'suspended': 'bg-purple-900/40 text-purple-300',
+        'unknown': 'bg-slate-800 text-slate-400'
+      } %}
+
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="px-3 py-1 text-xs rounded-full {{ colors.get(user.status, 'bg-slate-800 text-slate-400') }}">
+          {{ t(user.status) }}
+        </span>
+
+        {% if never_used %}
+          <span class="px-3 py-1 text-xs rounded-full bg-orange-900/40 text-orange-300">
+            {{ t("never_used") if t("never_used") != "never_used" else "Never used" }}
+          </span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="flex items-center gap-3">
+		<a class="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm transition-colors"
+		   href="{{ url_for('user_detail', user_id=user.id, tab='access', merge='1') }}">
+		  {{ t("merge_user") }}
+		</a>
+
+		{% set jellyfin_accounts_count = servers
+			| selectattr('media_type', 'equalto', 'jellyfin')
+			| list
+			| length
+		%}
+
+		{% if jellyfin_accounts_count > 0 %}
+		<button type="button"
+				id="openJellyfinPasswordModalBtn"
+				class="px-4 py-2 rounded-lg bg-cyan-700 hover:bg-cyan-800 text-white text-sm transition-colors">
+		  {{ t("change_password") if t("change_password") != "change_password" else "Change password" }}
+		</button>
+		{% endif %}
+
+		{% if not expiration_lock or expiration_lock.role_label != 'Owner' %}
+		<button type="button"
+				id="openDeleteUserModalBtn"
+				{% if expiration_lock and expiration_lock.role_label == 'Admin' %}disabled title="{{ t('remove_admin_to_delete') }}"{% endif %}
+				class="px-4 py-2 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-rose-700">
+		  {{ t("delete_user") if t("delete_user") != "delete_user" else "Delete user" }}
+		</button>
+		{% endif %}
+
+		<button type="submit"
+				class="px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white text-sm transition-colors">
+		  {{ t("save") }}
+		</button>
+    </div>
+  </div>
+
+  <div class="space-y-6">
+
+  <!-- ======================= Identity ======================= -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="text-sm font-semibold text-slate-200 mb-4">
+      {{ _t_identity }}
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <label class="text-sm">
+		{{ t("username") }}
+		<input type="text" name="username" value="{{ user.username }}"
+			   class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2"
+			   autocomplete="off">
+      </label>
+
+      <div class="text-sm">
+        <div class="text-slate-400">
+          {{ t("merged_usernames") if t("merged_usernames") != "merged_usernames" else "Merged usernames" }}
+        </div>
+        <div class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+          {% set names = merged_usernames if merged_usernames is defined else [] %}
+          {% if names %}
+            <div class="flex flex-wrap gap-2">
+              {% for n in names %}
+                <span class="px-2 py-0.5 text-xs rounded bg-slate-800 text-slate-200">{{ n }}</span>
+              {% endfor %}
+            </div>
+          {% else %}
+            <span class="text-sm text-slate-400 italic">{{ t("not_available") }}</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <label class="text-sm">
+        {{ t("firstname") }}
+        <input type="text" name="firstname" value="{{ user.firstname or '' }}"
+               class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+      </label>
+
+      <label class="text-sm">
+        {{ t("lastname") }}
+        <input type="text" name="lastname" value="{{ user.lastname or '' }}"
+               class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+      </label>
+
+      <label class="text-sm">
+        {{ t("phone") }}
+        <input type="tel" name="phone" value="{{ user.phone or '' }}" maxlength="24"
+               autocomplete="tel" inputmode="tel"
+               class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+      </label>
+    </div>
+  </div>
+
+
+  <!-- ================= Two column row ================= -->
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+
+    <div class="flex flex-col gap-6 h-full">
+    <!-- ===== Contact & notifications ===== -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex-1">
+      <div class="text-sm font-semibold text-slate-200 mb-4">
+        {{ _t_contact }}
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+        <label class="text-sm sm:col-span-2">
+          {{ t("email") }}
+          <input type="text" value="{{ user.email }}" readonly
+                 class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60 cursor-not-allowed">
+        </label>
+
+        <label class="text-sm sm:col-span-2">
+          {{ t("second_email") }}
+          <input type="text" name="second_email" value="{{ user.second_email or '' }}"
+                 class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+        </label>
+
+        <label class="text-sm">
+          {{ t("discord_user_id") }}
+          <input type="text" name="discord_user_id" value="{{ user.discord_user_id or '' }}"
+                 class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+        </label>
+
+        <label class="text-sm">
+          {{ t("discord_name") }}
+          <input type="text" name="discord_name" value="{{ user.discord_name or '' }}"
+                 class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+        </label>
+
+      </div>
+
+      {% if user_notifications_can_override %}
+        {% set use_global_checked = (not user.notifications_order_override) %}
+
+        <div class="mt-5 pt-5 border-t border-slate-800">
+
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <div class="text-sm font-semibold text-slate-200">
+                {{ t("notification_system_order") }}
+              </div>
+              <div class="text-xs text-slate-500 mt-1">
+                {{ t("user_notification_order_override_help") }}
+              </div>
+            </div>
+
+            <label class="inline-flex items-center gap-2 text-xs text-slate-300 mt-1">
+              <input id="use_global_notifications_order_cb"
+                     type="checkbox"
+                     name="use_global_notifications_order"
+                     value="1"
+                     class="h-4 w-4 rounded border-slate-700 bg-slate-800"
+                     {% if use_global_checked %}checked{% endif %}>
+              {{ t("use_global_settings") }}
+            </label>
+          </div>
+
+          {% set allowed_channels = ["discord", "email"] %}
+          {% set base_order = (settings.notifications_order or "email") %}
+          {% set user_order = (user.notifications_order_override or "") %}
+          {% set current_order = (user_order if user_order else base_order) %}
+          {% set ordered = current_order.split(",") %}
+
+          <div class="mt-4 bg-slate-950 border border-slate-800 rounded-2xl p-4">
+
+            <div class="flex items-center justify-between mb-3">
+              <div class="text-xs text-slate-400">{{ t("order_of_execution") }}</div>
+              <div class="text-xs text-slate-600">{{ t("top_is_tried_first") }}</div>
+            </div>
+
+            <div id="user_notif_order_layer"
+                 class="{% if use_global_checked %}opacity-50 pointer-events-none{% endif %}">
+
+              <ul id="user-notif-order-list" class="space-y-2">
+                {% for ch in ordered %}
+                  <li class="flex items-center justify-between gap-3 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2"
+                      data-channel="{{ ch }}">
+                    <span class="text-slate-200 text-sm font-medium">
+                      {{ t(ch) }}
+                    </span>
+                    <div class="flex items-center gap-2">
+                      <button type="button" class="order-up px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs">↑</button>
+                      <button type="button" class="order-down px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs">↓</button>
+                    </div>
+                  </li>
+                {% endfor %}
+              </ul>
+
+              <input type="hidden"
+                     name="user_notifications_order"
+                     id="user_notifications_order_hidden"
+                     value="{{ ordered | join(',') }}">
+            </div>
+          </div>
+
+        </div>
+{% endif %}
+    </div>
+
+    <!-- ======================= Options + Usage Risk ======================= -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shrink-0">
+      <div class="text-sm font-semibold text-slate-200 mb-4">
+        {{ _t_options }}
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_260px] gap-6">
+        <div class="min-w-0">
+      <div class="space-y-5">
+
+		<label class="text-sm block">
+		  <div class="text-slate-400 mb-1">{{ t("subscription_template") }}</div>
+
+		  {% if expiration_lock and expiration_lock.locked %}
+			<input type="text"
+				   id="subscription_template_id"
+				   value="{{ expiration_lock.role_label or expiration_lock.label }}"
+				   readonly
+				   class="mt-1 max-w-md w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60 cursor-not-allowed text-amber-300">
+
+			<div class="text-xs text-slate-500 mt-1">
+			  {{ expiration_lock.label }}
+			</div>
+		  {% else %}
+			<select name="subscription_template_id"
+					id="subscription_template_id"
+					class="mt-1 max-w-md w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+			  <option value="" {% if user.subscription_template_id is none %}selected{% endif %}>
+				{{ t("subscription_none") }}
+			  </option>
+			  {% for tpl in subscription_templates %}
+				<option value="{{ tpl.id }}"
+						data-lifetime="{{ tpl.is_lifetime or 0 }}"
+						{% if user.subscription_template_id == tpl.id %}selected{% endif %}>
+				  {{ tpl.name }}
+				</option>
+			  {% endfor %}
+			</select>
+		  {% endif %}
+		</label>
+
+		{% set ns = namespace(is_media_admin=false) %}
+
+		{% for s in servers %}
+
+		  {% set sraw = s.raw_json if s.raw_json is defined else None %}
+		  {% if sraw is string and sraw %}
+			{% set sraw = sraw | fromjson %}
+		  {% endif %}
+
+		  {% set spolicy = (sraw.Policy if sraw and sraw.Policy is defined else {}) %}
+
+		  {% set is_owner_plex =
+			  (s.media_type == 'plex')
+			  and ((s.media_role or '') | lower == 'owner')
+		  %}
+
+		  {% set is_jellyfin_admin =
+			  (s.media_type == 'jellyfin')
+			  and (
+				  ((s.media_role or '') | lower == 'admin')
+				  or (spolicy and spolicy.IsAdministrator is defined and spolicy.IsAdministrator)
+			  )
+		  %}
+
+		  {% if is_owner_plex or is_jellyfin_admin %}
+			{% set ns.is_media_admin = true %}
+		  {% endif %}
+
+		{% endfor %}
+
+		<div class="grid grid-cols-1 md:grid-cols-2 gap-6 divide-y md:divide-y-0 md:divide-x divide-slate-800">
+
+		  <!-- Expiration override -->
+		  <label class="text-sm block md:pr-2">
+			<div class="flex items-center gap-2 mb-2">
+			  <span>{{ t("expiration_date_override") }}</span>
+
+			  <div class="relative group">
+				<button type="button"
+						class="w-5 h-5 rounded-full bg-slate-800 text-slate-300 text-xs hover:bg-slate-700">
+				  ?
+				</button>
+
+				<div class="absolute left-0 z-50 hidden group-hover:block w-72 p-3 rounded-xl border border-slate-700 bg-slate-900 text-xs text-slate-300 shadow-xl">
+				  {{ t("expiration_date_override_help") }}
+				</div>
+			  </div>
+			</div>
+
+				<label class="inline-flex items-center gap-2">
+				  <input type="checkbox"
+						 id="expiration_date_override_cb"
+						 name="expiration_date_override"
+						 value="1"
+						 data-original="{% if user.expiration_date_override == 1 %}1{% else %}0{% endif %}"
+						 {% if user.expiration_date_override == 1 or (expiration_lock and expiration_lock.locked) %}checked{% endif %}
+						 {% if expiration_lock and expiration_lock.locked %}disabled{% endif %}
+						 class="rounded border-slate-700 bg-slate-950 text-indigo-500">
+
+				  <span class="text-slate-300">
+					{{ t("enabled") }}
+				  </span>
+				</label>
+
+				<div id="lifetime_override_notice"
+					 class="hidden mt-2 text-xs text-purple-300">
+				  {{ t("managed_by_lifetime_subscription") }}
+				</div>
+		  </label>
+
+		  <!-- Max streams override -->
+		  <label class="text-sm block md:pl-6">
+
+			<div class="flex items-center gap-2 mb-2">
+			  <span>{{ t("max_streams_override") }}</span>
+
+			  <div class="relative group">
+				<button type="button"
+						class="w-5 h-5 rounded-full bg-slate-800 text-slate-300 text-xs hover:bg-slate-700">
+				  ?
+				</button>
+
+				<div class="absolute left-0 z-50 hidden group-hover:block w-72 p-3 rounded-xl border border-slate-700 bg-slate-900 text-xs text-slate-300 shadow-xl">
+				  {{ t("max_streams_override_help") }}
+				</div>
+			  </div>
+			</div>
+
+			<input type="number"
+				   name="max_streams_override"
+				   value="{{ user.max_streams_override if user.max_streams_override is not none else '' }}"
+				   class="w-24 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+
+		  </label>
+
+		</div>
+
+      </div>
+        </div>
+
+      <a href="{{ url_for('monitoring_page', tab='usage_risk', q=user.username) }}"
+         class="group border-t lg:border-t-0 lg:border-l border-slate-800 pt-5 lg:pt-0 lg:pl-6 flex flex-col justify-center rounded-xl hover:bg-slate-950/40 transition-colors cursor-pointer">
+
+        <div class="text-sm font-semibold text-slate-200 mb-5">
+          {{ t("usage_risk") if t("usage_risk") != "usage_risk" else "Usage Risk" }}
+        </div>
+
+        {% if usage_risk.pending %}
+          <div class="text-sm text-slate-400" role="status">{{ t("usage_risk_pending") }}</div>
+        {% elif usage_risk.risk_level == 'high' %}
+          <div class="flex items-center gap-4 text-rose-400">
+            <span class="w-7 h-7 rounded-full bg-rose-500 shadow-lg shadow-rose-950/60"></span>
+            <span class="text-4xl font-bold tracking-tight">
+              {{ t("high") if t("high") != "high" else "High" }}
+            </span>
+          </div>
+        {% elif usage_risk.risk_level == 'medium' %}
+          <div class="flex items-center gap-4 text-amber-400">
+            <span class="w-7 h-7 rounded-full bg-amber-500 shadow-lg shadow-amber-950/60"></span>
+            <span class="text-4xl font-bold tracking-tight">
+              {{ t("medium") if t("medium") != "medium" else "Medium" }}
+            </span>
+          </div>
+        {% else %}
+          <div class="flex items-center gap-4 text-emerald-400">
+            <span class="w-7 h-7 rounded-full bg-emerald-500 shadow-lg shadow-emerald-950/60"></span>
+            <span class="text-4xl font-bold tracking-tight">
+              {{ t("low") if t("low") != "low" else "Low" }}
+            </span>
+          </div>
+        {% endif %}
+      </a>
+      </div>
+
+      {% if usage_risk.suggested_subscription %}
+        <div class="mt-6 pt-5 border-t border-slate-800">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <div class="text-sm font-semibold text-slate-200">
+                {{ t("subscription_upgrade_recommendation") }}
+              </div>
+              <div class="text-xs text-slate-500 mt-1">
+                {{ t("subscription_upgrade_recommendation_help") }}
+              </div>
+            </div>
+
+            <span class="px-3 py-1 rounded-full bg-primary/20 text-primary text-xs font-semibold">
+              {{ t("upgrade_recommended") }}
+            </span>
+          </div>
+
+          <div class="mt-4 rounded-xl bg-primary/10 border border-primary/30 px-4 py-3">
+            <div class="text-xs text-primary/80 mb-1">
+              {{ t("suggested_subscription") }}
+            </div>
+            <div class="text-base font-semibold text-primary">
+              {{ usage_risk.suggested_subscription }}
+            </div>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+    </div>
+
+    <!-- ===== Subscription & status ===== -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+      <div class="text-sm font-semibold text-slate-200 mb-4">
+        {{ _t_sub }}
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+		<label class="text-sm">
+		  {{ t("expiration") }}
+
+		  {% if expiration_lock and expiration_lock.locked %}
+			<input type="text"
+				   value="{{ expiration_lock.role_label or expiration_lock.label }}"
+				   readonly
+				   class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60 cursor-not-allowed text-amber-300">
+
+			<div class="text-xs text-slate-500 mt-1">
+			  {{ t('user_expiration_locked_owner') }}
+			</div>
+		  {% else %}
+			<input type="text"
+				   name="expiration_date"
+				   value="{{ user.expiration_date or '' }}"
+				   placeholder="{{ t('date_placeholder') }}"
+				   autocomplete="off"
+				   class="vodum-date mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+		  {% endif %}
+		</label>
+
+        <label class="text-sm">
+          {{ t("renewal_date") }}
+          <input type="text"
+                 value="{{ user.renewal_date or '' }}"
+                 readonly
+                 class="mt-1 w-full cursor-not-allowed bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60">
+        </label>
+
+        <label class="text-sm sm:col-span-2">
+          {{ t("renewal_method") }}
+          <input type="text" name="renewal_method"
+                 value="{{ user.renewal_method or '' }}"
+                 class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+        </label>
+
+        <label class="text-sm">
+          {{ t("creation_date") }}
+          <input type="text"
+                 value="{{ (user.created_at|tz).split(' ')[0] if user.created_at else t('not_available') }}"
+                 readonly
+                 class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60 cursor-not-allowed">
+        </label>
+
+        <div class="text-sm">
+          <div class="text-slate-400">{{ t("last_status") }}:</div>
+          <div class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+            {{ t(user.last_status) if user.last_status else t("not_available") }}
+          </div>
+        </div>
+
+        <label class="text-sm sm:col-span-2">
+          {{ t("status_changed_at") }}
+          <input type="text"
+                 value="{{ (user.status_changed_at|tz).split(' ')[0] if user.status_changed_at else t('not_available') }}"
+                 readonly
+                 class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 opacity-60 cursor-not-allowed">
+        </label>
+
+      </div>
+
+      <div class="mt-6 pt-6 border-t border-slate-800">
+        <div class="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <div class="text-sm font-semibold text-slate-200">
+              {{ t("users_tab_referrals") }}
+            </div>
+            <div class="text-xs text-slate-500 mt-1">
+              {{ t("user_referral_section_help") }}
+            </div>
+          </div>
+        </div>
+
+        <input type="hidden" name="referrer_user_id" id="referrer_user_id" value="{{ referral.referrer_user_id if referral else (user.referrer_user_id or '') }}">
+
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+            <div class="text-xs text-slate-400 mb-2">{{ t("referrer") }}</div>
+
+            {% set referrer_locked = referral and referral.status in ("qualified", "rewarded") %}
+
+            <div class="flex items-stretch gap-2">
+				<div id="referrer_display"
+					 class="min-w-0 flex-1 min-h-[44px] bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm flex items-center overflow-hidden">
+
+				  <div class="min-w-0 w-full leading-tight">
+
+					{% if referral and referral.referrer_username %}
+
+					  <div class="font-medium text-slate-200 truncate">
+						{{ referral.referrer_username }}
+					  </div>
+
+					  {% if referral.referrer_email %}
+					  <div class="text-xs text-slate-400 truncate">
+						{{ referral.referrer_email }}
+					  </div>
+					  {% endif %}
+
+					{% elif referrer_fallback %}
+
+					  <div class="font-medium text-slate-200 truncate">
+						{{ referrer_fallback.username }}
+					  </div>
+
+					  {% if referrer_fallback.email %}
+					  <div class="text-xs text-slate-400 truncate">
+						{{ referrer_fallback.email }}
+					  </div>
+					  {% endif %}
+
+					{% else %}
+
+					  <span class="text-slate-500">{{ t("no_referrer") }}</span>
+
+					{% endif %}
+
+				  </div>
+
+				</div>
+
+              {% if not referrer_locked %}
+              <button type="button"
+                      id="btn_open_referrer_modal"
+                      class="h-11 w-11 shrink-0 inline-flex items-center justify-center rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200"
+                      title="{{ t('choose_referrer') }}"
+                      aria-label="{{ t('choose_referrer') }}">
+                <svg xmlns="http://www.w3.org/2000/svg"
+                     viewBox="0 0 24 24"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="1.8"
+                     class="w-5 h-5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232a3 3 0 114.243 4.243L8 20l-4 1 1-4L15.232 5.232z"/>
+                </svg>
+              </button>
+              {% endif %}
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+              <div>
+                <div class="text-xs text-slate-400 mb-1">{{ t("referral_status") }}</div>
+                <div class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm">
+                  {% if referral %}
+                    {{ t('referral_' ~ referral.status) if t('referral_' ~ referral.status) != ('referral_' ~ referral.status) else referral.status }}
+                  {% else %}
+                    <span class="text-slate-500">{{ t("not_available") }}</span>
+                  {% endif %}
+                </div>
+              </div>
+
+              <div>
+                <div class="text-xs text-slate-400 mb-1">{{ t("referral_qualification_due_at") }}</div>
+                <div class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm">
+                  {{ referral.qualification_due_at[:10] if referral and referral.qualification_due_at else t("not_available") }}
+                </div>
+              </div>
+
+              <div>
+                <div class="text-xs text-slate-400 mb-1">{{ t("referral_reward_days_label") }}</div>
+                <div class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm">
+                  {{ referral.reward_days_snapshot if referral and referral.reward_days_snapshot is not none else t("not_available") }}
+                </div>
+              </div>
+
+              <div>
+                <div class="text-xs text-slate-400 mb-1">{{ t("referrals_total") }}</div>
+                <div class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm">
+                  {{ referral_stats.total_referrals or 0 }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+            <div class="flex items-center justify-between mb-3">
+              <div>
+                <div class="text-xs text-slate-400">{{ t("referred_users") }}</div>
+                <div class="text-[11px] text-slate-500 mt-1">{{ t("referred_users_help") }}</div>
+              </div>
+              <div class="text-xs text-slate-500">
+                {{ referred_users|length }}
+              </div>
+            </div>
+
+            {% if referred_users %}
+              <div class="space-y-2 max-h-56 overflow-y-auto pr-1">
+                {% for child in referred_users %}
+                  <a href="{{ url_for('user_detail', user_id=child.id) }}"
+                     class="flex items-center justify-between gap-3 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 hover:bg-slate-800">
+                    <div class="min-w-0">
+                      <div class="text-sm text-slate-100 truncate">{{ child.username }}</div>
+                      <div class="text-xs text-slate-400 truncate">{{ child.email or t("not_available") }}</div>
+                    </div>
+                    <div class="text-right shrink-0">
+                      <div class="text-xs text-slate-400">{{ t("status") }}</div>
+                      <div class="text-xs text-slate-200">{{ t(child.status) }}</div>
+                    </div>
+                  </a>
+                {% endfor %}
+              </div>
+            {% else %}
+              <div class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-4 text-sm text-slate-500">
+                {{ t("no_referred_users") }}
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- ======================= Notes ======================= -->
+    <!-- ======================= Notes ======================= -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+      <div class="text-sm font-semibold text-slate-200 mb-4">
+        {{ t("notes") }}
+      </div>
+
+      <textarea name="notes" rows="4"
+        class="w-full min-h-[120px] bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm resize-vertical">{{ user.notes or '' }}</textarea>
+    </div>
+
+  <!-- ======================= Active policies ======================= -->
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+    <div class="flex items-start justify-between gap-4 mb-4">
+      <div>
+        <div class="text-sm font-semibold text-slate-200">
+          {{ t("active_policies") if t("active_policies") != "active_policies" else "Active policies" }}
+        </div>
+        <div class="text-xs text-slate-500 mt-1">
+          {{ t("active_policies_help") if t("active_policies_help") != "active_policies_help" else "Policies currently applied to this user, ordered by priority." }}
+        </div>
+      </div>
+
+      <div class="text-xs text-slate-500">
+        {{ active_user_policies|length if active_user_policies is defined else 0 }}
+      </div>
+    </div>
+
+    {% if active_user_policies is defined and active_user_policies %}
+      <div class="space-y-3">
+        {% for policy in active_user_policies %}
+          <div class="bg-slate-950 border border-slate-800 rounded-xl px-4 py-3">
+            <div class="grid grid-cols-1 xl:grid-cols-[1fr_110px_140px_minmax(260px,360px)] gap-4 items-start">
+
+              <div class="min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+
+                  <span class="text-sm font-semibold text-slate-100">
+                    {{ policy.rule_type }}
+                  </span>
+
+                  <span class="px-2 py-0.5 text-[11px] rounded-full border border-slate-700 text-slate-300">
+                    {{ policy.origin_type }}
+                  </span>
+
+                  <span class="px-2 py-0.5 text-[11px] rounded-full border border-indigo-900/60 text-indigo-300">
+                    {{ policy.scope_label }}
+                  </span>
+                </div>
+
+                <div class="mt-2 text-xs text-slate-400">
+                  {{ t("origin") if t("origin") != "origin" else "Origin" }}:
+                  <span class="text-slate-200">{{ policy.origin_label }}</span>
+                </div>
+              </div>
+
+              <div class="text-xs">
+                <div class="text-slate-500">{{ t("priority") if t("priority") != "priority" else "Priority" }}</div>
+                <div class="text-slate-200">{{ policy.priority }}</div>
+              </div>
+
+              <div class="text-xs">
+                <div class="text-slate-500">{{ t("provider") if t("provider") != "provider" else "Provider" }}</div>
+                <div class="text-slate-200">{{ policy.provider }}</div>
+              </div>
+
+              <div class="text-xs">
+                <div class="text-slate-500">{{ t("value") if t("value") != "value" else "Value" }}</div>
+                <div class="text-slate-200 break-words">{{ policy.value }}</div>
+              </div>
+
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="bg-slate-950 border border-slate-800 rounded-xl px-4 py-5 text-sm text-slate-500">
+        {{ t("no_active_policies_for_user") if t("no_active_policies_for_user") != "no_active_policies_for_user" else "No active policies are currently applied to this user." }}
+      </div>
+    {% endif %}
+  </div>
+
+</div>
+
+  <div id="modal_referrer_picker" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/60"></div>
+
+    <div class="relative max-w-3xl mx-auto mt-16 bg-slate-950 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-800">
+        <div>
+          <div class="text-lg font-semibold">{{ t("choose_referrer") }}</div>
+          <div class="text-sm text-slate-400">{{ t("search_user") }}</div>
+        </div>
+        <button type="button" id="btn_close_referrer_modal" class="text-slate-300 hover:text-white">✕</button>
+      </div>
+
+      <div class="p-6 space-y-4">
+        <input type="text"
+               id="referrer_search_input"
+               class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm"
+               placeholder="{{ t('search_user') }}">
+
+        <div id="referrer_candidates"
+             class="max-h-[50vh] overflow-y-auto border border-slate-800 rounded-2xl divide-y divide-slate-800 bg-slate-900"></div>
+      </div>
+    </div>
+  </div>
+
+<div id="deleteUserModal" class="fixed inset-0 z-50 hidden" data-label-counts="{{ t('delete_user_counts') }}" data-label-will-return="{{ t('delete_user_will_return') }}" data-label-will-not-return="{{ t('delete_user_will_not_return') }}" data-label-blocked="{{ t('delete_user_blocked') }}" data-label-check-failed="{{ t('delete_user_check_failed') }}">
+  <div class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+
+  <div class="relative z-10 flex min-h-full items-center justify-center p-4">
+    <div class="vodum-modal-viewport w-full max-w-2xl rounded-2xl border border-rose-900/60 bg-slate-950 shadow-2xl overflow-hidden flex flex-col">
+      <div class="shrink-0 flex items-start justify-between gap-4 px-6 py-5 border-b border-slate-800">
+        <div>
+          <div class="text-lg font-semibold text-rose-300">
+            {{ t("delete_user_title") if t("delete_user_title") != "delete_user_title" else "Delete this user?" }}
+          </div>
+          <div class="text-sm text-slate-400 mt-1">
+            {{ user.username }}{% if user.email %} — {{ user.email }}{% endif %}
+          </div>
+        </div>
+
+        <button type="button"
+                id="closeDeleteUserModalBtn"
+                class="text-slate-400 hover:text-white text-xl leading-none">
+          ×
+        </button>
+      </div>
+
+      <div class="vodum-modal-scroll flex-1 px-6 py-5 space-y-4 text-sm text-slate-300">
+		<div id="deleteUserCheckLoading"
+			 class="rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-5 text-slate-300 hidden">
+		  <div class="flex flex-col items-center justify-center gap-2 text-center">
+			<div class="flex items-center justify-center gap-2">
+			  <span class="loading-dot"></span>
+			  <span class="loading-dot"></span>
+			  <span class="loading-dot"></span>
+			</div>
+
+			<div class="text-sm text-slate-200">
+			  {{ t("delete_user_check_loading") if t("delete_user_check_loading") != "delete_user_check_loading" else "Checking linked platforms..." }}
+			</div>
+
+			<div class="text-xs text-slate-500">
+			  {{ t('please_wait') }}
+			</div>
+		  </div>
+		</div>
+
+        <div id="deleteUserCheckError"
+             class="rounded-xl border border-amber-900/40 bg-amber-950/20 px-4 py-3 text-amber-200 hidden">
+        </div>
+
+        <div id="deleteUserInfoBox"
+             class="rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3 text-slate-200 hidden">
+        </div>
+
+        <div id="deleteUserReturnWarning"
+             class="rounded-xl border border-rose-900/40 bg-rose-950/20 px-4 py-3 text-rose-200 hidden">
+        </div>
+
+        <div id="deleteUserNoReturnInfo"
+             class="rounded-xl border border-emerald-900/40 bg-emerald-950/20 px-4 py-3 text-emerald-200 hidden">
+        </div>
+      </div>
+
+      <div class="shrink-0 px-6 py-4 border-t border-slate-800 flex items-center justify-end gap-3">
+        <button type="button"
+                id="cancelDeleteUserModalBtn"
+                class="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 text-sm">
+          {{ t("cancel") }}
+        </button>
+
+		<button type="submit"
+				id="confirmDeleteUserBtn"
+				formaction="{{ url_for('user_delete', user_id=user.id) }}"
+				formmethod="post"
+				disabled
+				class="px-4 py-2 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-sm">
+		  {{ t("delete_user_confirm_cta") if t("delete_user_confirm_cta") != "delete_user_confirm_cta" else "Yes, delete locally" }}
+		</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.loading-dot {
+	width: 10px;
+	height: 10px;
+	border-radius: 9999px;
+	background-color: #fb7185;
+	display: inline-block;
+	animation: loadingDotPulse 1.4s infinite ease-in-out;
+}
+
+.loading-dot:nth-child(1) {
+	animation-delay: 0s;
+}
+
+.loading-dot:nth-child(2) {
+	animation-delay: 0.2s;
+}
+
+.loading-dot:nth-child(3) {
+	animation-delay: 0.4s;
+}
+
+@keyframes loadingDotPulse {
+	0% {
+		opacity: 0.25;
+		transform: translateY(0);
+	}
+	20% {
+		opacity: 1;
+		transform: translateY(-3px);
+	}
+	40% {
+		opacity: 0.45;
+		transform: translateY(0);
+	}
+	100% {
+		opacity: 0.25;
+		transform: translateY(0);
+	}
+}
+</style>
+<script type="application/json" id="user-general-expiration-config">
+  {{ {
+    "server_expiration_locked": expiration_lock.locked if expiration_lock else false,
+    "server_expiration_label": expiration_lock.label if expiration_lock and expiration_lock.locked else "",
+    "referrer_candidates_url": "/api/users/referrer-candidates",
+    "no_referrer": t("no_referrer"),
+    "referrer_none_help": t("referrer_none_help"),
+    "no_user_found": t("no_user_found"),
+    "referrals_total": t("referrals_total"),
+    "jellyfin_password_url": url_for("user_change_jellyfin_password", user_id=user.id),
+    "jellyfin_password_success": "Password updated on {count} Jellyfin server(s).",
+    "invalid_json_response": "Invalid JSON response",
+    "unknown_error": "Unknown error",
+    "request_failed": "Request failed. Check browser console."
+  }|tojson }}
+</script>
+</form>
+
+<!-- ================= Jellyfin password modal ================= -->
+
+<div id="jellyfinPasswordModal" class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+
+  <div class="relative z-10 flex min-h-full items-center justify-center p-4">
+
+    <div class="vodum-modal-viewport w-full max-w-xl rounded-2xl border border-slate-800 bg-slate-950 shadow-2xl overflow-hidden flex flex-col">
+
+      <div class="shrink-0 flex items-start justify-between gap-4 px-6 py-5 border-b border-slate-800">
+        <div>
+          <div class="text-lg font-semibold text-slate-100">
+            {{ t("change_jellyfin_password") if t("change_jellyfin_password") != "change_jellyfin_password" else "Change Jellyfin password" }}
+          </div>
+
+          <div class="text-sm text-slate-400 mt-1">
+            {{ user.username }}
+          </div>
+        </div>
+
+        <button type="button"
+                id="closeJellyfinPasswordModalBtn"
+                class="text-slate-400 hover:text-white text-xl leading-none">
+          ×
+        </button>
+      </div>
+
+      <form id="jellyfinPasswordForm" method="post" autocomplete="off" class="vodum-modal-scroll flex-1">
+
+        <div class="px-6 py-5 space-y-5">
+
+          {% set jellyfin_servers = servers
+              | selectattr('media_type', 'equalto', 'jellyfin')
+              | list
+          %}
+
+          {% if jellyfin_servers|length > 1 %}
+
+          <div>
+            <div class="text-sm font-medium text-slate-200 mb-3">
+              {{ t("target_servers") if t("target_servers") != "target_servers" else "Target servers" }}
+            </div>
+
+            <div class="space-y-2">
+
+              <label class="flex items-center gap-3 text-sm">
+                <input type="checkbox"
+                       id="jf_select_all_servers"
+                       class="rounded border-slate-700 bg-slate-900">
+                <span>{{ t("all_servers") if t("all_servers") != "all_servers" else "All servers" }}</span>
+              </label>
+
+				{% for s in jellyfin_servers %}
+				<label class="flex items-center gap-3 text-sm">
+				  <input type="checkbox"
+						 name="server_ids"
+						 value="{{ s.server_id }}"
+						 class="jf-server-checkbox rounded border-slate-700 bg-slate-900">
+
+				  <span>{{ s.name }}</span>
+				</label>
+				{% endfor %}
+
+            </div>
+          </div>
+
+          {% else %}
+
+            {% for s in jellyfin_servers %}
+            <input type="hidden" name="server_ids" value="{{ s.server_id }}">
+            {% endfor %}
+
+          {% endif %}
+
+          <div>
+            <label class="text-sm block">
+              <div class="text-slate-300 mb-2">
+                {{ t("new_password") if t("new_password") != "new_password" else "New password" }}
+              </div>
+
+				<input type="password"
+					   name="jellyfin_new_password"
+					   required
+					   autocomplete="new-password"
+					   spellcheck="false"
+					   class="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-sm">
+            </label>
+          </div>
+
+          <div id="jf_password_result"
+               class="hidden rounded-xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm">
+          </div>
+
+        </div>
+
+        <div class="px-6 py-4 border-t border-slate-800 flex items-center justify-end gap-3">
+
+          <button type="button"
+                  id="cancelJellyfinPasswordModalBtn"
+                  class="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 text-sm">
+            {{ t("cancel") }}
+          </button>
+
+          <button type="submit"
+                  class="px-4 py-2 rounded-lg bg-cyan-700 hover:bg-cyan-800 text-white text-sm">
+            {{ t("save") }}
+          </button>
+
+        </div>
+
+      </form>
+
+    </div>
+  </div>
+</div>
+

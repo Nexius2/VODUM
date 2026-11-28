@@ -1,0 +1,40 @@
+<div class="text-sm font-semibold mb-4">{{ t("monitoring_top_movies_30d") }}</div>
+
+{% if top_movies_30d and top_movies_30d|length > 0 %}
+  <div class="space-y-3">
+    {% for c in top_movies_30d[:4] %}
+      <div class="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/70">
+        <div class="monitoring-top-row px-4 py-3">
+          <div class="monitoring-top-identity">
+            <div class="w-12 h-16 rounded-lg overflow-hidden bg-slate-800 shrink-0">
+              {% if c.poster_url %}
+                <img
+                  src="{{ c.poster_url }}"
+                  alt="{{ c.title or '-' }}"
+                  class="w-full h-full object-cover"
+                  loading="lazy"
+                  decoding="async"
+                >
+              {% endif %}
+            </div>
+
+            <div class="text-sm min-w-0">
+              <div class="monitoring-top-title font-semibold truncate text-white">{{ c.title or "-" }}</div>
+            </div>
+          </div>
+
+          <div class="text-xs text-slate-300 text-right shrink-0">
+            <div>{{ t('monitoring_users_count')|replace('{count}', c.viewers|string) }}</div>
+            <div class="text-slate-400">{{ t('monitoring_plays_count')|replace('{count}', c.plays|string) }}</div>
+            <div>
+              {% set ms = c.watch_ms or 0 %}
+              {{ (ms // 3600000) }}h {{ ((ms % 3600000) // 60000) }}m
+            </div>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="text-slate-500">{{ t("no_data") }}</div>
+{% endif %}

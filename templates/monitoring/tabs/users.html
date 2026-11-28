@@ -1,0 +1,106 @@
+{% set historical_snapshot = g.monitoring_snapshot|default(none) %}
+{% include "monitoring/partials/_statistics_status.html" %}
+{% if not historical_snapshot or historical_snapshot.ready %}
+<div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+  <div class="flex items-center justify-between mb-4">
+    <div class="text-sm font-semibold">{{ t("users") }}</div>
+    <div class="text-xs text-slate-400">{{ t("monitoring_user_rows_page") }}</div>
+  </div>
+
+	<form method="get" id="monitoring_users_filter_form" class="flex flex-wrap items-center gap-3 mb-4">
+	  <input type="hidden" name="tab" value="users">
+	  <input type="hidden" name="page" value="1">
+
+	  <input id="monitoring_users_search_input"
+			 type="text"
+			 name="q"
+			 value="{{ request.args.get('q','') }}"
+			 placeholder="{{ t('search_user') }}"
+			 class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm w-full md:w-96">
+	</form>
+
+
+
+
+  {% if rows is not defined %}
+    <div class="text-slate-500">
+      {{ t('monitoring_rows_missing') }}
+    </div>
+  {% else %}
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+		<thead>
+		{% set current_sort = sort_key or "last" %}
+		{% set current_dir  = sort_dir or "desc" %}
+
+		<tr class="text-left border-b border-slate-800">
+
+		{% macro th(label, key) %}
+		  {% set active = (current_sort == key) %}
+		  {% set next_dir = "asc" if (active and current_dir == "desc") else "desc" %}
+		  {% set args = dict(request.args) %}
+		  {% set _ = args.update({
+			  "tab": "users",
+			  "sort": key,
+			  "dir": next_dir,
+			  "page": 1
+		  }) %}
+		  <th class="py-2 pr-4">
+			<a href="{{ url_for('monitoring_page', **args) }}"
+			   class="inline-flex items-center gap-2
+					  {{ 'text-emerald-400 font-semibold' if active else 'text-slate-400' }}">
+			  {{ label }}
+			  {% if active %}
+				{{ '▲' if current_dir == 'asc' else '▼' }}
+			  {% else %}
+				↕
+			  {% endif %}
+			</a>
+		  </th>
+		{% endmacro %}
+
+		{{ th("User", "user") }}
+		{{ th("Last watch", "last") }}
+		{{ th("Plays", "plays") }}
+		{{ th("Watch time", "watch") }}
+		{{ th("IP", "ip") }}
+		{{ th("Platform", "platform") }}
+		{{ th("Player", "player") }}
+
+		</tr>
+		</thead>
+
+        <tbody>
+          {% for u in rows %}
+            <tr class="border-b border-slate-800">
+              <td class="py-3 pr-4 font-semibold">
+				  <a class="text-slate-200 hover:text-emerald-400"
+					 href="{{ url_for('monitoring_user_detail', user_id=u.user_id, view='profile') }}">
+					{{ u.username or "-" }}
+				  </a>
+			  </td>
+
+              <td class="py-3 pr-4">{{ u.last_watch_at|browser_datetime if u.last_watch_at else "-" }}</td>
+              <td class="py-3 pr-4">{{ u.total_plays or 0 }}</td>
+              <td class="py-3 pr-4">{{ u.watch_time or "0h 0m" }}</td>
+              <td class="py-3 pr-4">{{ u.last_ip or "-" }}</td>
+              <td class="py-3 pr-4">{{ u.platform or "-" }}</td>
+              <td class="py-3 pr-4">{{ u.player or "-" }}</td>
+            </tr>
+          {% endfor %}
+          {% if rows|length == 0 %}
+            <tr><td colspan="7" class="py-6 text-slate-500">{{ t("no_user_found") }}</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if pagination is defined %}
+      {% include "monitoring/partials/_pagination.html" %}
+    {% endif %}
+  {% endif %}
+</div>
+
+
+
+{% endif %}

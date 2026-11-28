@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% set active_page = "server_configuration" %}
+
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/server-configuration.css', v=g.app_version|default('dev')) }}">{% endblock %}
+{% block header_title %}{{ t("server_config_title") }}{% endblock %}
+{% block header_subtitle %}{{ t("config_profiles_subtitle") }}{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  {% include "server_configuration/_nav.html" %}
+
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+    <section class="bg-slate-900 p-6 rounded-xl border border-slate-800">
+      <h2 class="text-lg font-semibold text-slate-200 mb-1">{{ t("config_profile_new") }}</h2>
+      <p class="text-sm text-slate-400 mb-4">{{ t("config_profile_new_help") }}</p>
+      <form method="POST" action="{{ url_for('server_configuration_profile_create') }}" class="space-y-4">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+        <div>
+          <label for="config-profile-name" class="block text-sm mb-1 text-slate-300">{{ t("config_profile_name") }}</label>
+          <input id="config-profile-name" type="text" name="name" required maxlength="80" placeholder="{{ t('config_profile_name_placeholder') }}"
+                 class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label for="config-profile-description" class="block text-sm mb-1 text-slate-300">{{ t("config_description") }}</label>
+          <input id="config-profile-description" type="text" name="description" maxlength="300"
+                 class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label for="config-profile-source" class="block text-sm mb-1 text-slate-300">{{ t("config_profile_source") }}</label>
+          <select id="config-profile-source" name="source" class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+            {% for server in servers %}
+            <option value="server:{{ server.id }}">{{ t("config_profile_source_server").format(server=server.name) }}</option>
+            {% endfor %}
+            <option value="provider:plex">{{ t("config_profile_source_empty").format(platform="Plex") }}</option>
+            <option value="provider:jellyfin">{{ t("config_profile_source_empty").format(platform="Jellyfin") }}</option>
+          </select>
+        </div>
+        <label class="flex items-center gap-2 text-xs text-slate-300">
+          <input type="checkbox" name="skip_libraries" value="1" class="w-4 h-4 rounded border-slate-600 bg-slate-800">
+          {{ t("config_profile_skip_libraries") }}
+        </label>
+        <div class="flex justify-end">
+          <button type="submit" class="px-4 py-2 bg-primary hover:bg-primary-dark rounded text-white text-sm">{{ t("config_profile_create") }}</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="bg-slate-900 p-6 rounded-xl border border-slate-800">
+      <h2 class="text-lg font-semibold text-slate-200 mb-4">{{ t("config_tab_profiles") }}</h2>
+      {% if profiles %}
+      <ul class="divide-y divide-slate-800">
+        {% for profile in profiles %}
+        <li class="py-3 flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <a href="{{ url_for('server_configuration_profile', profile_id=profile.id) }}" class="text-sm text-slate-200 hover:text-primary break-all">{{ profile.name }}</a>
+            {% if profile.description %}<div class="text-xs text-slate-400 mt-1">{{ profile.description }}</div>{% endif %}
+          </div>
+          <div class="shrink-0 flex items-center gap-2 text-xs text-slate-400">
+            {{ t("config_profile_settings_count").format(count=profile.settings|length) }}
+            {% with badge_type = profile.provider %}{% include "server_configuration/_type_badge.html" %}{% endwith %}
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="text-sm text-slate-400">{{ t("config_profile_none") }}</p>
+      {% endif %}
+    </section>
+  </div>
+
+  <section class="bg-slate-900 p-6 rounded-xl border border-slate-800">
+    <h2 class="text-lg font-semibold text-slate-200 mb-1">{{ t("config_reference_title") }}</h2>
+    <p class="text-sm text-slate-400 mb-4">{{ t("config_reference_help") }}</p>
+    <ul class="divide-y divide-slate-800">
+      {% for item in resolution.values() %}
+      <li data-config-resolution class="py-3 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-2 text-sm text-slate-200">
+          {{ item.server.name }}
+          {% with badge_type = item.server.type %}{% include "server_configuration/_type_badge.html" %}{% endwith %}
+        </div>
+        {% if item.conflict_keys %}
+        <form method="POST" action="{{ url_for('server_configuration_choose_profile', server_id=item.server.id) }}" class="flex flex-wrap items-center gap-2">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+          <span class="px-2 py-0.5 rounded-full text-xs {% if item.needs_choice %}bg-rose-900/40 text-rose-300{% else %}bg-slate-800 text-slate-300{% endif %}">{{ t("config_reference_conflict").format(count=item.conflict_keys|length) }}</span>
+          <label class="sr-only" for="config-reference-{{ item.server.id }}">{{ t("config_reference_profile") }}</label>
+          <select id="config-reference-{{ item.server.id }}" name="profile_id" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs">
+            {% for profile in item.profiles %}<option value="{{ profile.id }}" {% if item.reference and item.reference.id == profile.id %}selected{% endif %}>{{ profile.name }}</option>{% endfor %}
+          </select>
+          <button type="submit" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200">{{ t("config_reference_choose") }}</button>
+          {% if not item.needs_choice %}<span class="text-xs text-slate-500">{{ t("config_reference_chosen") }}</span>{% endif %}
+        </form>
+        {% elif item.reference %}
+        <div class="text-xs text-slate-300">{{ t("config_reference_profile") }} <span class="text-slate-100">{{ item.reference.name }}</span></div>
+        {% else %}
+        <div class="text-xs text-slate-500">{{ t("config_reference_unmanaged") }}</div>
+        {% endif %}
+      </li>
+      {% else %}
+      <li class="py-3 text-sm text-slate-400">{{ t("server_config_empty_title") }}</li>
+      {% endfor %}
+    </ul>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  {% include "partials/confirm_modal.html" %}
+{% endblock %}

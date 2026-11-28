@@ -1,0 +1,144 @@
+﻿{% set live = total_live|default(0) %}
+{% set transcode = total_transcode|default(0) %}
+{% set direct = live - transcode %}
+{% set fragment_state = 'live' if sessions and sessions|length > 0 else ('idle' if idle_card else 'empty') %}
+{% set fragment_key = now_playing_key if fragment_state == 'live' else (idle_card.quote_key if idle_card and idle_card.quote_key else fragment_state) %}
+
+<div data-now-playing-fragment data-state="{{ fragment_state }}" data-key="{{ fragment_key }}{% if fragment_state == 'idle' %}:{{ idle_card.poster_url or '' }}{% endif %}">
+<div class="flex items-center justify-between mb-3">
+    <div class="flex items-center gap-3 min-w-0">
+		<h2 class="text-sm font-semibold truncate">
+			{% if live > 0 %}
+				{{ t("monitoring.section.sessions") }}
+			{% elif idle_card %}
+				{{ t("dashboard_quote_title") }}
+			{% else %}
+				{{ t("monitoring.section.sessions") }}
+			{% endif %}
+		</h2>
+
+
+
+		{% if now_playing_stale %}
+		<span class="rounded-full border border-amber-800 bg-amber-950/40 px-2 py-0.5 text-[10px] text-amber-300"
+		      title="{{ t('now_playing_delayed_help') }}">{{ t("now_playing_delayed") }}</span>
+		{% endif %}
+    </div>
+
+    <span class="text-[11px] whitespace-nowrap">
+
+        {% if live == 0 %}
+            <span class="text-slate-500 font-medium">0 {{ t("monitoring_servers_live") }}</span>
+        {% else %}
+
+			<span class="text-[14px]">
+				<span class="text-white font-medium">{{ live }}</span> {{ t("now_playing_live_count") }}
+			</span>
+
+            {% if direct > 0 %}
+                · <span class="text-emerald-300 font-medium">{{ direct }}</span> {{ t("monitoring_live_direct_play") }}
+            {% endif %}
+
+            {% if transcode > 0 %}
+                · <span class="text-orange-300 font-medium">{{ transcode }}</span> {{ t("now_playing_transcode_count") }}
+            {% endif %}
+
+        {% endif %}
+
+    </span>
+
+</div>
+
+
+{% if sessions and sessions|length > 0 %}
+    <div class="space-y-2">
+        {% for s in sessions %}
+            <div class="relative overflow-hidden rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-1.5">
+                {% if s.backdrop_url %}
+                    <img
+                        src="{{ s.backdrop_url }}"
+                        alt=""
+                        class="js-artwork-image absolute inset-0 h-full w-full object-cover opacity-30 pointer-events-none"
+                        loading="lazy"
+                        decoding="async"
+                    >
+                    <div class="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/70 to-slate-950/90"></div>
+                {% endif %}
+
+                <div class="relative z-10 flex items-center gap-3">
+                    {% if s.poster_url %}
+                        <img
+                            src="{{ s.poster_url }}"
+                            alt=""
+                            class="js-artwork-image w-12 h-16 rounded-lg object-cover border border-slate-700/70 shrink-0"
+                            decoding="async"
+                        />
+                    {% endif %}
+
+                    <div class="min-w-0 flex-1">
+                        <div class="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 min-w-0">
+
+                            <div class="min-w-0">
+                                <div class="flex flex-wrap gap-2">
+                                    {% set p = (s.provider or '')|lower %}
+                                    <span class="text-[10px] px-2 py-0.5 rounded-full border
+                                        {% if 'plex' in p %}
+                                            border-orange-500 text-orange-300 bg-orange-500/10
+                                        {% elif 'jellyfin' in p %}
+                                            border-blue-500 text-blue-300 bg-blue-500/10
+                                        {% else %}
+                                            border-slate-700 text-slate-200 bg-slate-900/30
+                                        {% endif %}">
+                                        {{ s.provider }}
+                                    </span>
+
+                                    {% if s.is_transcode %}
+                                        <span class="text-[10px] px-2 py-0.5 rounded-full border border-orange-500 text-orange-300">{{ t("transcoding") }}</span>
+                                    {% else %}
+                                        <span class="text-[10px] px-2 py-0.5 rounded-full border border-emerald-600 text-emerald-300">{{ t("monitoring_direct_play") }}</span>
+                                    {% endif %}
+
+                                    <span class="text-[10px] px-2 py-0.5 rounded-full border border-slate-700 text-slate-200">
+                                        {{ s.server_name }}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="text-[10px] text-slate-500 whitespace-nowrap justify-self-end pt-0.5">
+                                {{ t("last_check") }} : {{ s.last_seen_at|browser_datetime if s.last_seen_at else '—' }}
+                            </div>
+
+                            <div class="col-span-2 text-sm font-semibold truncate min-w-0">
+                                {% if (s.media_type or '')|lower in ['episode', 'tv', 'tv_episode'] or s.episode_code %}
+                                    {{ s.grandparent_title or "-" }}
+                                    {% if s.episode_code %}
+                                        <span class="text-slate-400"> · {{ s.episode_code }}</span>
+                                    {% endif %}
+                                    {% if s.title %}
+                                        <span class="text-slate-400"> ·</span> {{ s.title }}
+                                    {% endif %}
+                                {% else %}
+                                    {{ s.title or "-" }}
+                                {% endif %}
+                            </div>
+
+                            <div class="col-span-2 text-xs text-slate-400 truncate min-w-0">
+                                {{ t("now_playing_user") }}: <span class="text-slate-200">{{ s.username or "-" }}</span>
+                                · {{ t("now_playing_state") }}: <span class="text-slate-200">{{ s.state or "-" }}</span>
+                                · {{ t("client") }}: <span class="text-slate-200">{{ s.client_name or "-" }}</span>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+
+{% elif idle_card %}
+    {% include "dashboard/partials/_idle_quote.html" %}
+
+{% else %}
+    <p class="text-xs text-slate-500">{{ t("monitoring_no_active_session") }}</p>
+{% endif %}
+</div>

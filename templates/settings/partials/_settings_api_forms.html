@@ -1,0 +1,39 @@
+<form id="api-token-create-form" method="POST" action="{{ url_for('api_token_create') }}" class="hidden">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+</form>
+<form id="api-token-revoke-form" method="POST" action="{{ url_for('settings_page') }}" class="hidden"
+      data-api-token-revoke data-confirm="{{ t('api_token_revoke_confirm') }}"
+      data-confirm-title="{{ t('api_token_revoke') }}" data-confirm-label="{{ t('api_token_revoke') }}">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+</form>
+
+{% if api_token_created %}
+<div id="api-token-modal" data-testid="api-token-created" data-settings-modal-backdrop
+     class="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-0 sm:p-4" aria-hidden="false">
+  <div class="vodum-modal-viewport flex h-[100dvh] w-full max-w-2xl flex-col overflow-hidden rounded-none border border-slate-700 bg-slate-900 sm:h-auto sm:rounded-xl">
+    <div class="flex shrink-0 items-start justify-between border-b border-slate-800 bg-slate-900 px-4 py-4 sm:px-6 sm:py-5">
+      <div>
+        <h3 class="text-lg font-semibold text-white">{{ t("api_token_created_title") }}</h3>
+        <p class="text-xs text-slate-400 mt-1">{{ api_token_created.name }} · {% for scope in api_token_created.scopes %}{{ t("api_scope_" ~ scope) }}{% if not loop.last %}, {% endif %}{% endfor %}</p>
+      </div>
+      <button type="button" data-vodum-modal-close data-settings-modal-close="api-token-modal"
+              class="text-slate-400 hover:text-white text-xs leading-none">{{ t("common.close") }}</button>
+    </div>
+    <div class="vodum-modal-scroll flex-1 space-y-4 px-4 py-4 sm:px-6 sm:py-5">
+      <div class="rounded-lg border border-amber-800/60 bg-amber-950/20 p-3 text-sm text-amber-200">{{ t("api_token_shown_once") }}</div>
+      <div>
+        <label for="api-token-value" class="block text-sm mb-1 text-slate-300">{{ t("api_token_value") }}</label>
+        <input id="api-token-value" type="text" readonly value="{{ api_token_created.token }}" autocomplete="off" spellcheck="false"
+               class="w-full font-mono bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm">
+      </div>
+      <div>
+        <p class="text-xs text-slate-400">{{ t("api_token_usage_help") }}</p>
+        <pre class="mt-2 overflow-x-auto rounded bg-slate-950 border border-slate-800 p-3 text-xs text-slate-300">Authorization: Bearer &lt;token&gt;</pre>
+      </div>
+    </div>
+    <div class="flex shrink-0 justify-end gap-2 border-t border-slate-700 bg-slate-900 px-4 py-3 sm:px-6 sm:py-4">
+      <a href="{{ url_for('settings_page') }}#api-access" class="px-4 py-2 bg-primary hover:bg-primary-dark rounded text-white text-sm">{{ t("api_token_done") }}</a>
+    </div>
+  </div>
+</div>
+{% endif %}

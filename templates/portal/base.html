@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="{{ active_lang or 'en' }}">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <script src="{{ url_for('static', filename='js/error-reporting.js', v=g.app_version|default('dev')) }}"></script>
+  <title>{% block title %}{{ portal_brand_name or app_brand_name }}{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/vodum.css', v=g.app_version|default('dev')) }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css', v=g.app_version|default('dev')) }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/portal-mobile.css', v=g.app_version|default('dev')) }}">
+  {% block head %}{% endblock %}
+</head>
+<body class="portal-shell min-h-screen bg-slate-950 text-slate-100">
+  {% set portal_brand_length = (portal_brand_name or app_brand_name or '')|length %}
+  {% set portal_brand_size = 'text-xl' if portal_brand_length <= 24 else ('text-base' if portal_brand_length <= 40 else 'text-sm') %}
+  {% set primary_pages = ['profile', 'requests', 'subscription'] %}
+  <header class="border-b border-slate-800 bg-slate-900" data-portal-header>
+    <div class="portal-header-content mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-4">
+      <a href="{{ url_for('portal_admin_user_preview',user_id=preview_user_id,page='profile') if admin_preview else url_for('portal_home') }}" class="portal-header-brand flex min-w-0 items-center gap-3 {{ portal_brand_size }} font-semibold leading-tight">{% if portal_logo_url %}<img src="{{ portal_logo_url }}" alt="" class="h-8 w-8 shrink-0 rounded object-contain">{% endif %}<span class="min-w-0 break-words">{{ portal_brand_name or app_brand_name }}</span></a>
+      <nav id="portal-navigation" aria-label="{{ t('portal_navigation') }}" class="portal-header-nav flex flex-wrap items-center gap-2 text-sm">
+        {% if admin_preview %}
+        <span class="rounded bg-amber-950 px-3 py-2 text-amber-200">{{ t('portal_admin_preview_badge') }}</span>
+        {% endif %}
+        {% for page, label, endpoint, enabled in [
+          ('profile', 'portal_profile', 'portal_profile', true),
+          ('system-status', 'portal_system_status', 'portal_system_status', portal_features.media),
+          ('requests', 'portal_requests_title', 'portal_media_requests', portal_features.requests),
+          ('monitoring', 'portal_monitoring', 'portal_monitoring', portal_features.monitoring),
+          ('subscription', 'portal_subscription', 'portal_subscription', portal_features.subscription),
+          ('support', 'portal_support', 'portal_support', portal_features.support)
+        ] if enabled %}
+        <a href="{{ url_for('portal_admin_user_preview', user_id=preview_user_id, page=page) if admin_preview else url_for(endpoint) }}"
+           class="{{ 'flex items-center gap-1.5 ' if page == 'support' and not admin_preview else '' }}rounded px-3 py-2 {{ 'bg-slate-800 text-cyan-300' if active_portal_page == page else 'text-slate-300' }}"{% if active_portal_page == page %} aria-current="page"{% endif %}{% if page in primary_pages %} data-portal-primary{% endif %}>{{ t(label) }}{% if page == 'support' and not admin_preview and portal_unread_messages|default(0) > 0 %}<span class="rounded-full bg-rose-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">{{ portal_unread_messages }}</span>{% endif %}</a>
+        {% endfor %}
+        {% if admin_preview %}
+        <a href="{{ url_for('portal_settings_page') }}" class="rounded px-3 py-2 text-cyan-300 hover:bg-slate-800">{{ t('portal_back_to_settings') }}</a>
+        {% else %}
+        <form method="post" action="{{ url_for('portal_logout') }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token }}"><button class="rounded px-3 py-2 text-slate-300 hover:bg-slate-800">{{ t("common.logout") }}</button></form>
+        {% endif %}
+      </nav>
+      {% include "portal/_mobile_dock.html" %}
+    </div>
+  </header>
+  <main class="mx-auto max-w-6xl px-4 py-8"{% if admin_preview %} data-admin-preview{% endif %}>
+    {% block flash_messages %}{% with messages=get_flashed_messages(with_categories=true) %}{% for category,msg in messages %}<div class="mb-4 rounded border {{ 'border-red-800' if category == 'error' else 'border-slate-700' }} bg-slate-900 px-4 py-3 text-sm" role="{{ 'alert' if category == 'error' else 'status' }}">{{ t(msg) }}</div>{% endfor %}{% endwith %}{% endblock %}
+    {% block content %}{% endblock %}
+  </main>
+  <script src="{{ url_for('static', filename='js/pages/portal-base.js', v=g.app_version|default('dev')) }}"></script>
+  {% block scripts %}{% endblock %}
+  {% if portal_terms_url or portal_privacy_url %}<footer class="mx-auto flex max-w-6xl gap-4 px-4 py-6 text-xs text-slate-500">{% if portal_terms_url %}<a href="{{ portal_terms_url }}" rel="noopener noreferrer">{{ t('portal_terms') }}</a>{% endif %}{% if portal_privacy_url %}<a href="{{ portal_privacy_url }}" rel="noopener noreferrer">{{ t('portal_privacy') }}</a>{% endif %}</footer>{% endif %}
+</body></html>
